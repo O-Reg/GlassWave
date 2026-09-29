@@ -11,6 +11,7 @@
   if(!Array.isArray(state.profiles))state.profiles=[];
   function apply(){
     document.body.classList.toggle('ui-custom-colors',!!state.enabled);
+    document.body.classList.toggle('ui-light-glass',!!state.enabled&&state.preset==='light');
     const style=document.body.style,set=(k,v)=>style.setProperty('--ui-'+k,v);
     for(const k of ['background','panel','accent','selection','sidebar','topbar','playerbar']){
       const color=['sidebar','topbar','playerbar'].includes(k)&&!state.separate?state.panel:state[k];

@@ -306,6 +306,55 @@ class UIController {
     if (label) label.textContent = `${amount.toFixed(1)}×`;
   }
 
+  getVisualizerModeControls(mode = this.visualizer?.mode) {
+    const defaults = {
+      intensity: 1,
+      position: this.visualizer?.getDefaultPositionForMode(mode) || 'center',
+      offsetY: 0,
+      scale: 1.25
+    };
+    const saved = this.visualizerModeControls?.[mode] || {};
+    const clamp = (value, fallback, min, max) => {
+      const number = Number(value);
+      return value == null || !Number.isFinite(number) ? fallback : Math.min(max, Math.max(min, number));
+    };
+    return {
+      intensity: clamp(saved.intensity, defaults.intensity, 0.5, 2),
+      position: ['behind', 'below', 'center'].includes(saved.position) ? saved.position : defaults.position,
+      offsetY: clamp(saved.offsetY, defaults.offsetY, -180, 180),
+      scale: clamp(saved.scale, defaults.scale, 0.7, 2.8)
+    };
+  }
+
+  applyVisualizerModeControls(mode = this.visualizer?.mode) {
+    if (!this.visualizer || !mode) return;
+    const controls = this.getVisualizerModeControls(mode);
+    this.visualizer.setIntensity(controls.intensity);
+    this.visualizer.setPositionPreset(controls.position);
+    this.visualizer.setOffsetY(controls.offsetY);
+    this.visualizer.setScale(controls.scale);
+    this.syncVisualizerCustomizationUI();
+  }
+
+  saveVisualizerModeControls(patch, mode = this.visualizer?.mode) {
+    if (!mode) return;
+    this.visualizerModeControls ||= {};
+    this.visualizerModeControls[mode] = { ...this.getVisualizerModeControls(mode), ...patch };
+    this._visualizerModeControlsChanged = true;
+    try { localStorage.setItem('glasswave_visualizer_mode_controls_v1', JSON.stringify(this.visualizerModeControls)); } catch (e) {}
+    clearTimeout(this._saveVisualizerModeControlsTimer);
+    this._saveVisualizerModeControlsTimer = setTimeout(() => {
+      window.glasswaveAPI?.saveConfig?.({ visualizerModeControls: this.visualizerModeControls });
+    }, 250);
+  }
+
+  switchVisualizerMode(mode) {
+    if (!this.visualizer || !['wave', 'spectrum', 'sphere', 'bars', 'orb', 'ambient', 'reactive', 'curtain'].includes(mode)) return;
+    if (this.visualizer.mode !== mode) this.visualizer.setMode(mode);
+    this.applyVisualizerModeControls(mode);
+    document.querySelectorAll('.vis-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.mode === mode));
+  }
+
   organizeSettingsCategories() {
     const panel = document.getElementById('settings-panel-main');
     if (!panel || panel.querySelector('.settings-category-title')) return;
@@ -322,7 +371,7 @@ class UIController {
     if (shortcutEntry) { used.add(shortcutEntry); panel.append(shortcutEntry); }
     addGroup('桌面与背景', ['transparency-controls','btn-choose-custom-bg','pure-color-dense-grid']);
     addGroup('皮肤与界面', ['interface-color-settings','skin-manager-entry','theme-preset-grid','setting-compact-sidebar-nav','btn-toggle-cover']);
-    addGroup('视觉效果', ['btn-open-vis-advanced','setting-intensity','setting-vis-offset-y','setting-glow-enabled','setting-parallax']);
+    addGroup('视觉效果', ['btn-open-vis-advanced','setting-glow-enabled','setting-parallax']);
     addGroup('播放与曲库', ['setting-autoplay','setting-launch-shuffle','setting-remember-progress','setting-auto-add-dropped','btn-unhide-all']);
     // Keep any future controls in their own final section rather than losing them.
     const remaining = original.filter(item => !used.has(item));
@@ -398,6 +447,7 @@ class UIController {
       drawer.style.display = 'flex';
       if (triggerBtn) triggerBtn.classList.add('active');
       if (shortcutBtn) shortcutBtn.classList.add('active');
+      this.selectVisualizerTuneMode?.(this.visualizer?.mode, false);
       this.syncVisualizerCustomizationUI();
       if (this.syncVisualizerTuningUI) this.syncVisualizerTuningUI();
 
@@ -981,18 +1031,9 @@ class UIController {
     const tabs = document.querySelectorAll('.vis-tab');
     tabs.forEach(tab => {
       tab.addEventListener('click', () => {
-        tabs.forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
         const mode = tab.dataset.mode;
-        if (this.visualizer) {
-          this.visualizer.setMode(mode);
-          // 除了柱谱默认在封面正下方 (below) 以外，其他波形均默认在屏幕视窗中心 (center)
-          const defaultPos = this.visualizer.getDefaultPositionForMode(mode);
-          this.visualizer.setPositionPreset(defaultPos);
-          const posBtns = document.querySelectorAll('.vis-pos-btn');
-          posBtns.forEach(b => b.classList.toggle('active', b.dataset.pos === defaultPos));
-          try { localStorage.setItem('glasswave_vis_pos', defaultPos); } catch (e) {}
-        }
+        this.switchVisualizerMode(mode);
+        this.selectVisualizerTuneMode?.(mode, false);
       });
     });
 
@@ -4948,13 +4989,12 @@ class UIController {
     // 3. Visualizer mode, position & scale
     if (this.visualizer) {
       if (p.visMode) {
-        this.visualizer.setMode(p.visMode);
-        document.querySelectorAll('.vis-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === p.visMode));
+        this.switchVisualizerMode(p.visMode);
+        this.selectVisualizerTuneMode?.(p.visMode, false);
       }
       if (p.visPos) {
         this.visualizer.setPositionPreset(p.visPos);
         document.querySelectorAll('.vis-pos-btn').forEach(b => b.classList.toggle('active', b.dataset.pos === p.visPos));
-        try { localStorage.setItem('glasswave_vis_pos', p.visPos); } catch (e) {}
       }
       if (p.visOffsetY !== undefined) {
         this.visualizer.setOffsetY(p.visOffsetY);
@@ -4962,7 +5002,6 @@ class UIController {
         const yLbl = document.getElementById('lbl-vis-offset-y');
         if (ySlider) ySlider.value = p.visOffsetY;
         if (yLbl) yLbl.textContent = `${p.visOffsetY > 0 ? '+' : ''}${p.visOffsetY}px`;
-        try { localStorage.setItem('glasswave_vis_offset_y', p.visOffsetY); } catch (e) {}
       }
       if (p.visScale !== undefined) {
         this.visualizer.setScale(p.visScale);
@@ -4970,8 +5009,13 @@ class UIController {
         const sLbl = document.getElementById('lbl-vis-scale');
         if (sSlider) sSlider.value = p.visScale;
         if (sLbl) sLbl.textContent = `${p.visScale}x`;
-        try { localStorage.setItem('glasswave_vis_scale', p.visScale); } catch (e) {}
       }
+      this.saveVisualizerModeControls({
+        intensity: this.visualizer.intensity,
+        position: this.visualizer.positionPreset,
+        offsetY: this.visualizer.offsetY,
+        scale: this.visualizer.visScale
+      });
     }
 
     // Highlight card
@@ -6183,7 +6227,6 @@ class UIController {
     const itemRememberProgress = document.getElementById('setting-item-remember-progress');
     const descRememberProgress = document.getElementById('setting-desc-remember-progress');
     const settingParallax = document.getElementById('setting-parallax');
-    const settingIntensity = document.getElementById('setting-intensity');
     const settingAutoAddDropped = document.getElementById('setting-auto-add-dropped');
     const settingCompactNav = document.getElementById('setting-compact-sidebar-nav');
     const btnUnhideAll = document.getElementById('btn-unhide-all');
@@ -6288,10 +6331,6 @@ class UIController {
         updateLaunchSettingsLinkage();
 
         if (settingParallax) settingParallax.checked = cfg.mouseParallax !== false;
-        if (settingIntensity && cfg.visualizerIntensity) {
-          this.syncIntensityControl(cfg.visualizerIntensity);
-          this.visualizer?.setIntensity(cfg.visualizerIntensity);
-        }
         if (settingAutoAddDropped) {
           settingAutoAddDropped.checked = !!cfg.autoAddDroppedToLibrary;
         }
@@ -6346,15 +6385,6 @@ class UIController {
       settingParallax.onchange = (e) => {
         api.saveConfig({ mouseParallax: e.target.checked });
         this.parallax?.setEnabled(e.target.checked);
-      };
-    }
-    if (settingIntensity) {
-      this.syncIntensityControl(settingIntensity.value);
-      settingIntensity.oninput = (e) => {
-        const val = parseFloat(e.target.value);
-        this.syncIntensityControl(val);
-        this.visualizer?.setIntensity(val);
-        if (api) api.saveConfig({ visualizerIntensity: val });
       };
     }
     if (settingAutoAddDropped && api) {
@@ -7587,19 +7617,12 @@ class UIController {
 
     // 7. Reset visualizer position & scale if modified
     if (this.visualizer) {
-      this.visualizer.setPositionPreset('behind');
-      this.visualizer.setOffsetY(0);
-      this.visualizer.setScale(1.25);
-      const posButtons = document.querySelectorAll('.vis-pos-btn');
-      posButtons.forEach(b => b.classList.toggle('active', b.dataset.pos === 'behind'));
-      const offsetYSlider = document.getElementById('setting-vis-offset-y');
-      const offsetYLabel = document.getElementById('lbl-vis-offset-y');
-      if (offsetYSlider) offsetYSlider.value = 0;
-      if (offsetYLabel) offsetYLabel.textContent = '0px';
-      const scaleSlider = document.getElementById('setting-vis-scale');
-      const scaleLabel = document.getElementById('lbl-vis-scale');
-      if (scaleSlider) scaleSlider.value = 1.25;
-      if (scaleLabel) scaleLabel.textContent = '1.25x';
+      this.visualizerModeControls = {};
+      this._visualizerModeControlsChanged = true;
+      clearTimeout(this._saveVisualizerModeControlsTimer);
+      try { localStorage.setItem('glasswave_visualizer_mode_controls_v1', '{}'); } catch (e) {}
+      window.glasswaveAPI?.saveConfig?.({ visualizerModeControls: {} });
+      this.applyVisualizerModeControls();
     }
 
     // 8. Reset background cutout to off and clear both saved thresholds.
@@ -7639,106 +7662,73 @@ class UIController {
   // =========================================================================
   bindVisualizerCustomization() {
     if (!this.visualizer) return;
+    const key = 'glasswave_visualizer_mode_controls_v1';
+    const initialMode = this.visualizer.mode;
+    let savedMap = null;
+    try { savedMap = JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) {}
+    this.visualizerModeControls = savedMap && typeof savedMap === 'object' && !Array.isArray(savedMap) ? savedMap : {};
 
-    const posButtons = document.querySelectorAll('.vis-pos-btn');
-    const offsetYSlider = document.getElementById('setting-vis-offset-y');
-    const offsetYLabel = document.getElementById('lbl-vis-offset-y');
-    const scaleSlider = document.getElementById('setting-vis-scale');
-    const scaleLabel = document.getElementById('lbl-vis-scale');
-    const api = window.glasswaveAPI;
+    // Migrate the old global sliders into the mode that was active at startup.
+    const legacyPosition = localStorage.getItem('glasswave_vis_pos');
+    const legacyOffset = localStorage.getItem('glasswave_vis_offset_y');
+    const legacyScale = localStorage.getItem('glasswave_vis_scale');
+    const hasLegacy = legacyPosition !== null || legacyOffset !== null || legacyScale !== null;
+    if (!savedMap && hasLegacy) {
+      this.visualizerModeControls[initialMode] = {
+        ...(legacyPosition !== null ? { position: legacyPosition } : {}),
+        ...(legacyOffset !== null ? { offsetY: Number(legacyOffset) } : {}),
+        ...(legacyScale !== null ? { scale: Number(legacyScale) } : {})
+      };
+      try { localStorage.setItem(key, JSON.stringify(this.visualizerModeControls)); } catch (e) {}
+    }
+    this.applyVisualizerModeControls(initialMode);
 
-    const formatScale = (s) => {
-      const num = parseFloat(s);
-      if (isNaN(num)) return '1.25x';
-      return (Math.round(num * 100) / 100).toFixed(2).replace(/\.?0+$/, '') + 'x';
-    };
-
-    // 1. Position preset
-    const savedPos = localStorage.getItem('glasswave_vis_pos') || 'behind';
-    this.visualizer.setPositionPreset(savedPos);
-    posButtons.forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.pos === savedPos);
-      btn.onclick = () => {
-        posButtons.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        const pos = btn.dataset.pos;
-        this.visualizer.setPositionPreset(pos);
-        try { localStorage.setItem('glasswave_vis_pos', pos); } catch (e) {}
-        if (api && api.saveConfig) {
-          api.saveConfig({ visualizerPosition: pos });
-        }
+    document.querySelectorAll('.vis-pos-btn').forEach(button => {
+      button.onclick = () => {
+        const position = button.dataset.pos;
+        this.visualizer.setPositionPreset(position);
+        this.saveVisualizerModeControls({ position });
+        this.syncVisualizerCustomizationUI();
       };
     });
-
-    // 2. Vertical offset Y
-    const savedOffsetY = localStorage.getItem('glasswave_vis_offset_y');
-    const initialOffsetY = savedOffsetY !== null ? Number(savedOffsetY) : 0;
-    this.visualizer.setOffsetY(initialOffsetY);
-    if (offsetYSlider) {
-      offsetYSlider.value = initialOffsetY;
-      if (offsetYLabel) offsetYLabel.textContent = `${initialOffsetY > 0 ? '+' : ''}${initialOffsetY}px`;
-      const updateOffsetY = (val) => {
-        const numVal = Number(val) || 0;
-        this.visualizer.setOffsetY(numVal);
-        if (offsetYLabel) offsetYLabel.textContent = `${numVal > 0 ? '+' : ''}${numVal}px`;
-        try { localStorage.setItem('glasswave_vis_offset_y', numVal); } catch (err) {}
-        if (api && api.saveConfig) {
-          api.saveConfig({ visualizerOffsetY: numVal });
-        }
+    const bindSlider = (id, field, setter) => {
+      const slider = document.getElementById(id);
+      if (!slider) return;
+      slider.oninput = () => {
+        const value = Number(slider.value);
+        setter.call(this.visualizer, value);
+        this.saveVisualizerModeControls({ [field]: value });
+        this.syncVisualizerCustomizationUI();
       };
-      offsetYSlider.oninput = (e) => updateOffsetY(e.target.value);
-      offsetYSlider.onchange = (e) => updateOffsetY(e.target.value);
-    }
+    };
+    bindSlider('setting-intensity', 'intensity', this.visualizer.setIntensity);
+    bindSlider('setting-vis-offset-y', 'offsetY', this.visualizer.setOffsetY);
+    bindSlider('setting-vis-scale', 'scale', this.visualizer.setScale);
 
-    // 3. Global Scale
-    const savedScale = localStorage.getItem('glasswave_vis_scale');
-    const initialScale = savedScale !== null ? Number(savedScale) : 1.25;
-    this.visualizer.setScale(initialScale);
-    if (scaleSlider) {
-      scaleSlider.value = initialScale;
-      if (scaleLabel) scaleLabel.textContent = formatScale(initialScale);
-      const updateScale = (val) => {
-        const numVal = parseFloat(val) || 1.25;
-        this.visualizer.setScale(numVal);
-        if (scaleLabel) scaleLabel.textContent = formatScale(numVal);
-        try { localStorage.setItem('glasswave_vis_scale', numVal); } catch (err) {}
-        if (api && api.saveConfig) {
-          api.saveConfig({ visualizerScale: numVal });
+    // Migrate native sensitivity too; the old slider stored it only in config.
+    if (!savedMap && window.glasswaveAPI?.getConfig) {
+      window.glasswaveAPI.getConfig().then(config => {
+        if (!config || this._visualizerModeControlsChanged) return;
+        if (config.visualizerModeControls && typeof config.visualizerModeControls === 'object' && Object.keys(config.visualizerModeControls).length) {
+          this.visualizerModeControls = config.visualizerModeControls;
+        } else {
+          const legacy = this.visualizerModeControls[initialMode] || {};
+          this.visualizerModeControls[initialMode] = {
+            intensity: config.visualizerIntensity,
+            position: legacy.position ?? config.visualizerPosition,
+            offsetY: legacy.offsetY ?? config.visualizerOffsetY,
+            scale: legacy.scale ?? config.visualizerScale
+          };
         }
-      };
-      scaleSlider.oninput = (e) => updateScale(e.target.value);
-      scaleSlider.onchange = (e) => updateScale(e.target.value);
-    }
-
-    // 4. Hydrate from native config if available
-    if (api && api.getConfig) {
-      api.getConfig().then(cfg => {
-        if (!cfg) return;
-        if (cfg.visualizerPosition) {
-          this.visualizer.setPositionPreset(cfg.visualizerPosition);
-          posButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.pos === cfg.visualizerPosition));
-          try { localStorage.setItem('glasswave_vis_pos', cfg.visualizerPosition); } catch (e) {}
-        }
-        if (cfg.visualizerOffsetY !== undefined) {
-          const y = Number(cfg.visualizerOffsetY);
-          this.visualizer.setOffsetY(y);
-          if (offsetYSlider) offsetYSlider.value = y;
-          if (offsetYLabel) offsetYLabel.textContent = `${y > 0 ? '+' : ''}${y}px`;
-          try { localStorage.setItem('glasswave_vis_offset_y', y); } catch (e) {}
-        }
-        if (cfg.visualizerScale !== undefined) {
-          const s = Number(cfg.visualizerScale);
-          this.visualizer.setScale(s);
-          if (scaleSlider) scaleSlider.value = s;
-          if (scaleLabel) scaleLabel.textContent = formatScale(s);
-          try { localStorage.setItem('glasswave_vis_scale', s); } catch (e) {}
-        }
+        try { localStorage.setItem(key, JSON.stringify(this.visualizerModeControls)); } catch (e) {}
+        if (this.visualizer.mode === initialMode) this.applyVisualizerModeControls(initialMode);
       }).catch(() => {});
     }
   }
 
   syncVisualizerCustomizationUI() {
     if (!this.visualizer) return;
+    this.syncIntensityControl(this.visualizer.intensity);
     const pos = this.visualizer.positionPreset || this.visualizer.getDefaultPositionForMode(this.visualizer.mode);
     const offsetY = this.visualizer.offsetY || 0;
     const scale = this.visualizer.visScale || 1.25;
@@ -7781,25 +7771,22 @@ class UIController {
     };
 
     let activeTuneMode = 'wave';
+    const sharedModeControls = document.getElementById('vis-mode-common-controls');
 
     const switchTuneMode = (mode, syncLiveVis = true) => {
+      if (!sections[mode]) return;
       activeTuneMode = mode;
       tuneTabs.forEach(t => t.classList.toggle('active', t.dataset.tuneMode === mode));
+      if (mode !== 'audio' && sharedModeControls) sections[mode].prepend(sharedModeControls);
       Object.keys(sections).forEach(k => {
         if (sections[k]) sections[k].style.display = (k === mode ? 'block' : 'none');
       });
       if (syncLiveVis && this.visualizer && mode !== 'audio') {
-        this.visualizer.setMode(mode);
-        const defaultPos = this.visualizer.getDefaultPositionForMode(mode);
-        this.visualizer.setPositionPreset(defaultPos);
-        const posBtns = document.querySelectorAll('.vis-pos-btn');
-        posBtns.forEach(b => b.classList.toggle('active', b.dataset.pos === defaultPos));
-        try { localStorage.setItem('glasswave_vis_pos', defaultPos); } catch (e) {}
-
-        const sidebarTabs = document.querySelectorAll('.vis-tab');
-        sidebarTabs.forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+        this.switchVisualizerMode(mode);
       }
     };
+    this.selectVisualizerTuneMode = switchTuneMode;
+    switchTuneMode(this.visualizer.mode, false);
 
     tuneTabs.forEach(tab => {
       tab.onclick = () => {
@@ -8083,6 +8070,10 @@ class UIController {
           audio: '音频响应'
         };
         this.visualizer.resetModeTuning(activeTuneMode);
+        if (activeTuneMode !== 'audio') {
+          this.saveVisualizerModeControls({ intensity: 1, position: this.visualizer.getDefaultPositionForMode(activeTuneMode), offsetY: 0, scale: 1.25 }, activeTuneMode);
+          this.applyVisualizerModeControls(activeTuneMode);
+        }
         this.syncVisualizerTuningUI();
         this.showToast(`✨ 已恢复当前【${modeMap[activeTuneMode] || activeTuneMode}】微调参数为默认值`);
       };
@@ -8092,6 +8083,12 @@ class UIController {
     if (btnResetAll) {
       btnResetAll.onclick = () => {
         this.visualizer.resetAllVisualTuning();
+        this.visualizerModeControls = {};
+        this._visualizerModeControlsChanged = true;
+        try { localStorage.setItem('glasswave_visualizer_mode_controls_v1', '{}'); } catch (e) {}
+        clearTimeout(this._saveVisualizerModeControlsTimer);
+        window.glasswaveAPI?.saveConfig?.({ visualizerModeControls: {} });
+        this.applyVisualizerModeControls();
         this.syncVisualizerTuningUI();
         this.showToast('✨ 已恢复全部视觉模式及音频响应为出厂默认值');
       };

@@ -762,32 +762,6 @@
               <button class="glass-pill-btn" id="btn-reset-window-glass" style="padding: 3px 10px; font-size: 12px; white-space: nowrap;" title="重置为默认深邃毛玻璃 (0%)">重置</button>
             </div>
           </div>
-          <!-- Visualizer Position & Scale Controls (Requirement 2 & Fullscreen Expansion) -->
-          <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 14px;">
-            <div class="setting-info">
-              <div class="setting-title">频谱与光球视觉定位与大小 (Visualizer Position & Scale)</div>
-              <div class="setting-desc">自由控制光球与环形/球形/横向频谱的核心锚定基准位置、垂直偏移与全局缩放倍率（全屏下自动大幅扩展）</div>
-            </div>
-            <!-- Position Presets Button Group -->
-            <div class="vis-pos-group" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-              <span style="font-size: 13px; color: var(--text-muted); margin-right: 4px;">核心基准位置：</span>
-              <button class="glass-pill-btn vis-pos-btn" data-pos="behind">封面正后方 (Behind Album)</button>
-              <button class="glass-pill-btn vis-pos-btn" data-pos="below">封面正下方 (Below Album)</button>
-              <button class="glass-pill-btn vis-pos-btn active" data-pos="center">屏幕视窗中心 (Screen Center)</button>
-            </div>
-            <!-- Sliders Box -->
-            <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06);">
-              <div class="stable-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
-                <div style="font-size: 13px; color: var(--text-main); min-width: 130px;">垂直高度微调：<span id="lbl-vis-offset-y" style="color: var(--accent-primary); font-weight: 600;">0px</span></div>
-                <input type="range" id="setting-vis-offset-y" min="-180" max="180" step="5" value="0" class="glass-slider" style="flex: 1;">
-              </div>
-              <div class="stable-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
-                <div style="font-size: 13px; color: var(--text-main); min-width: 130px;">视觉元素大小倍率：<span id="lbl-vis-scale" style="color: var(--accent-primary); font-weight: 600;">1.25x</span></div>
-                <input type="range" id="setting-vis-scale" min="0.7" max="2.8" step="0.05" value="1.25" class="glass-slider" style="flex: 1;">
-              </div>
-            </div>
-          </div>
-
           <div class="setting-item" style="flex-direction:column;align-items:stretch">
             <div class="stable-slider-row"><div>桌面透光程度<span id="lbl-desktop-reveal">0%</span></div><input id="setting-desktop-reveal" type="range" class="glass-slider" min="0" max="100" step="1" value="0" aria-label="桌面透光程度"></div>
             <p class="setting-desc">只调整底幕透明度，不降低角色图片的不透明度。可搭配黑底或白底抠图使用。</p>
@@ -895,11 +869,6 @@
             <button class="glass-pill-btn" id="btn-manage-skins">管理 ›</button>
           </div>
           <div id="custom-preset-grid" class="custom-preset-grid" hidden></div>
-          <div class="setting-item parameter-row" id="row-visualizer-intensity" data-parameter-ready="true">
-            <div class="parameter-heading"><label for="setting-intensity">视觉灵敏度</label><span class="parameter-value" id="lbl-visualizer-intensity">1.0×</span></div>
-            <input type="range" id="setting-intensity" min="0.5" max="2.0" step="0.1" value="1.0" class="glass-slider has-progress-fill" aria-describedby="desc-visualizer-intensity">
-            <p class="setting-desc" id="desc-visualizer-intensity">调节波形和背景流光对音频振幅的响应强度</p>
-          </div>
           <div class="setting-item library-restore-setting">
             <div class="setting-info">
               <div class="setting-title">重新显示移出歌曲</div>
@@ -1012,6 +981,39 @@
           </div>
           <div class="vis-tuning-notice">
             <span>💡 点击上方标签可切换微调目标并联动播放舞台实时预览；各模式均已支持超宽屏空间透视与精细调节。</span>
+          </div>
+
+          <!-- Shared controls are mounted inside the selected mode panel; values persist per mode. -->
+          <div id="vis-mode-common-controls">
+          <div class="setting-item parameter-row" id="row-visualizer-intensity" data-parameter-ready="true">
+            <div class="parameter-heading"><label for="setting-intensity">视觉灵敏度</label><span class="parameter-value" id="lbl-visualizer-intensity">1.0×</span></div>
+            <input type="range" id="setting-intensity" min="0.5" max="2.0" step="0.1" value="1.0" class="glass-slider has-progress-fill" aria-describedby="desc-visualizer-intensity">
+            <p class="setting-desc" id="desc-visualizer-intensity">调节波形和背景流光对音频振幅的响应强度</p>
+          </div>
+          <div class="setting-item" id="vis-mode-position-controls" style="flex-direction: column; align-items: stretch; gap: 14px;">
+            <div class="setting-info">
+              <div class="setting-title">屏幕与光球视觉定位与大小</div>
+              <div class="setting-desc">当前模式独立保存基准位置、垂直偏移和视觉大小。</div>
+            </div>
+            <!-- Position Presets Button Group -->
+            <div class="vis-pos-group" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span style="font-size: 13px; color: var(--text-muted); margin-right: 4px;">核心基准位置：</span>
+              <button class="glass-pill-btn vis-pos-btn" data-pos="behind">封面后方</button>
+              <button class="glass-pill-btn vis-pos-btn" data-pos="below">封面下方</button>
+              <button class="glass-pill-btn vis-pos-btn active" data-pos="center">屏幕中心</button>
+            </div>
+            <!-- Sliders Box -->
+            <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06);">
+              <div class="stable-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                <div style="font-size: 13px; color: var(--text-main); min-width: 130px;">垂直高度微调：<span id="lbl-vis-offset-y" style="color: var(--accent-primary); font-weight: 600;">0px</span></div>
+                <input type="range" id="setting-vis-offset-y" min="-180" max="180" step="5" value="0" class="glass-slider" style="flex: 1;">
+              </div>
+              <div class="stable-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                <div style="font-size: 13px; color: var(--text-main); min-width: 130px;">视觉元素大小倍率：<span id="lbl-vis-scale" style="color: var(--accent-primary); font-weight: 600;">1.25x</span></div>
+                <input type="range" id="setting-vis-scale" min="0.7" max="2.8" step="0.05" value="1.25" class="glass-slider" style="flex: 1;">
+              </div>
+            </div>
+          </div>
           </div>
 
           <!-- Section 1: 波形 (Wave) -->

@@ -31,6 +31,7 @@ class LibraryDatabase {
       visualizerPosition: 'behind',
       visualizerOffsetY: 0,
       visualizerScale: 1.25,
+      visualizerModeControls: {},
       lastPlayback: null,
       customFolders: [],
       hiddenTrackPaths: [],

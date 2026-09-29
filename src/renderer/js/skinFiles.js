@@ -16,7 +16,8 @@
       for(const [k,v] of Object.entries(data.settings))if(!legacyDesktopBlur(k))localStorage.setItem(k,v);
       if(data.presets)localStorage.setItem('glasswave_user_presets',JSON.stringify(data.presets));
       localStorage.setItem('glasswave_skin_pending_runtime',JSON.stringify(data.runtime));
-      await glasswaveAPI.saveConfig({mouseParallax:data.runtime.mouseParallax!==false,visualizerIntensity:data.runtime.intensity,visualizerPosition:data.runtime.position,visualizerOffsetY:data.runtime.offsetY,visualizerScale:data.runtime.scale});
+      const modeControls=JSON.parse(data.settings.glasswave_visualizer_mode_controls_v1||'null')||{[data.runtime.mode]:{intensity:data.runtime.intensity,position:data.runtime.position,offsetY:data.runtime.offsetY,scale:data.runtime.scale}};
+      await glasswaveAPI.saveConfig({mouseParallax:data.runtime.mouseParallax!==false,visualizerIntensity:data.runtime.intensity,visualizerPosition:data.runtime.position,visualizerOffsetY:data.runtime.offsetY,visualizerScale:data.runtime.scale,visualizerModeControls:modeControls});
     }catch(e){
       sessionStorage.removeItem(pendingModeKey);
       localStorage.clear();for(const [k,v] of Object.entries(before))localStorage.setItem(k,v);
@@ -31,8 +32,10 @@
     localStorage.removeItem('glasswave_skin_pending_runtime');
     sessionStorage.removeItem(pendingModeKey);
     if(runtime){
-      ui.visualizer.setMode(runtime.mode);ui.visualizer.setIntensity(runtime.intensity);
+      ui.switchVisualizerMode(runtime.mode);ui.visualizer.setIntensity(runtime.intensity);
       ui.visualizer.setPositionPreset(runtime.position);ui.visualizer.setOffsetY(runtime.offsetY);ui.visualizer.setScale(runtime.scale);
+      ui.saveVisualizerModeControls({intensity:runtime.intensity,position:runtime.position,offsetY:runtime.offsetY,scale:runtime.scale});
+      ui.selectVisualizerTuneMode?.(runtime.mode,false);
       document.querySelectorAll('.vis-tab').forEach(b=>b.classList.toggle('active',b.dataset.mode===runtime.mode));
       ui.syncVisualizerTuningUI();ui.syncVisualizerCustomizationUI();
     }
