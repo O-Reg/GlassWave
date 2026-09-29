@@ -43,6 +43,15 @@ class UIController {
     this.colorEngine = colorEngine;
     this.parallax = parallax;
 
+    // Keep all slide-out drawers in the same coordinate space as the rounded
+    // window shell. Fixed layers in different ancestors can expose a strip at
+    // the top while the frameless window is moved.
+    const appShell = document.getElementById('app-shell');
+    for (const id of ['view-settings', 'view-visualizer-drawer', 'glass-queue-drawer']) {
+      const drawer = document.getElementById(id);
+      if (appShell && drawer && drawer.parentElement !== appShell) appShell.appendChild(drawer);
+    }
+
     // Core Data States
     this.allTracks = [];
     this.filteredTracks = [];
@@ -7823,6 +7832,7 @@ class UIController {
       if (syncLiveVis && this.visualizer && mode !== 'audio') {
         this.switchVisualizerMode(mode);
       }
+      if (mode !== 'audio') this.syncVisualizerTuningUI();
     };
     this.selectVisualizerTuneMode = switchTuneMode;
     switchTuneMode(this.visualizer.mode, false);
@@ -8181,11 +8191,12 @@ class UIController {
       if (lbl && checked !== undefined) lbl.textContent = checked ? onText : offText;
     };
 
-    setSelectVal('vis-palette', t.palette || 'original');
+    const modeColor = t.modeColors?.[this.visualizer.mode] || { palette: t.palette, solidColor: t.solidColor };
+    setSelectVal('vis-palette', modeColor.palette || 'original');
     const solidInput = document.getElementById('vis-solid-color');
-    if (solidInput) solidInput.value = t.solidColor || '#38bdf8';
+    if (solidInput) solidInput.value = modeColor.solidColor || '#38bdf8';
     document.querySelectorAll('[data-vis-solid]').forEach(button => {
-      const active = t.palette === 'solid' && button.dataset.visSolid === t.solidColor;
+      const active = modeColor.palette === 'solid' && button.dataset.visSolid === modeColor.solidColor;
       button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
     });
     setSliderVal('vis-wave-density','lbl-vis-wave-density',t.wave.density,v=>Number(v).toFixed(1));

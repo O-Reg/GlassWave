@@ -927,18 +927,6 @@
 
         <!-- Visualizer Advanced Tuning Panel -->
         <div class="settings-content" id="settings-panel-advanced-vis">
-          <section class="vis-color-controls" aria-label="视觉配色">
-            <label class="palette-setting">视觉配色<select id="vis-palette" class="glass-select"><option value="original">原始配色</option><option value="aurora">极光 · 蓝紫粉</option><option value="ocean">深海 · 青蓝</option><option value="sunset">落日 · 金橙粉</option><option value="forest">森光 · 绿青</option><option value="solid">纯色</option></select></label>
-            <div class="vis-solid-swatches">
-              <button data-vis-solid="#38bdf8" style="--swatch:#38bdf8" aria-label="冰蓝纯色" title="冰蓝"></button>
-              <button data-vis-solid="#a78bfa" style="--swatch:#a78bfa" aria-label="紫色纯色" title="紫色"></button>
-              <button data-vis-solid="#fb7185" style="--swatch:#fb7185" aria-label="玫红纯色" title="玫红"></button>
-              <button data-vis-solid="#fbbf24" style="--swatch:#fbbf24" aria-label="金色纯色" title="金色"></button>
-              <button data-vis-solid="#34d399" style="--swatch:#34d399" aria-label="绿色纯色" title="绿色"></button>
-              <button data-vis-solid="#ffffff" style="--swatch:#ffffff" aria-label="白色纯色" title="白色"></button>
-              <label class="custom-solid-label">自定<input id="vis-solid-color" type="color" value="#38bdf8" aria-label="自定义纯色"></label>
-            </div>
-          </section>
           <!-- Visual Quality & Quick Config Row -->
           <div class="vis-quality-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding: 7px 12px; background: rgba(255, 255, 255, 0.04); border-radius: 9px; border: 1px solid rgba(255, 255, 255, 0.08);">
             <div style="font-size: 13px; color: var(--text-main); font-weight: 500; display: flex; align-items: center; gap: 6px;">
@@ -982,6 +970,18 @@
 
           <!-- Shared controls are mounted inside the selected mode panel; values persist per mode. -->
           <div id="vis-mode-common-controls">
+          <section class="vis-color-controls" aria-label="当前模式视觉配色">
+            <label class="palette-setting">当前模式配色<select id="vis-palette" class="glass-select"><option value="original">原始配色</option><option value="aurora">极光 · 蓝紫粉</option><option value="ocean">深海 · 青蓝</option><option value="sunset">落日 · 金橙粉</option><option value="forest">森光 · 绿青</option><option value="solid">纯色</option></select></label>
+            <div class="vis-solid-swatches">
+              <button data-vis-solid="#38bdf8" style="--swatch:#38bdf8" aria-label="冰蓝纯色" title="冰蓝"></button>
+              <button data-vis-solid="#a78bfa" style="--swatch:#a78bfa" aria-label="紫色纯色" title="紫色"></button>
+              <button data-vis-solid="#fb7185" style="--swatch:#fb7185" aria-label="玫红纯色" title="玫红"></button>
+              <button data-vis-solid="#fbbf24" style="--swatch:#fbbf24" aria-label="金色纯色" title="金色"></button>
+              <button data-vis-solid="#34d399" style="--swatch:#34d399" aria-label="绿色纯色" title="绿色"></button>
+              <button data-vis-solid="#ffffff" style="--swatch:#ffffff" aria-label="白色纯色" title="白色"></button>
+              <label class="custom-solid-label">自定<input id="vis-solid-color" type="color" value="#38bdf8" aria-label="自定义纯色"></label>
+            </div>
+          </section>
           <div class="setting-item parameter-row" id="row-visualizer-intensity" data-parameter-ready="true">
             <div class="parameter-heading"><label for="setting-intensity">视觉灵敏度</label><span class="parameter-value" id="lbl-visualizer-intensity">1.0×</span></div>
             <input type="range" id="setting-intensity" min="0.5" max="2.0" step="0.1" value="1.0" class="glass-slider has-progress-fill" aria-describedby="desc-visualizer-intensity">

@@ -1116,8 +1116,10 @@ function createWindow() {
   // Custom Wallpaper Dialog IPC Handler (Requirement 4)
   ipcMain.handle('app-choose-wallpaper', async () => {
     if (!mainWindow) return null;
+    const lastFolder = database?.config?.lastWallpaperFolder;
     const result = await dialog.showOpenDialog(mainWindow, {
       title: '选择自定义背景图片',
+      ...(typeof lastFolder === 'string' && fs.existsSync(lastFolder) ? { defaultPath: lastFolder } : {}),
       properties: ['openFile'],
       filters: [
         { name: '图片文件 (*.jpg, *.png, *.webp, *.jpeg, *.bmp)', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] }
@@ -1125,6 +1127,12 @@ function createWindow() {
     });
     if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
       return null;
+    }
+    if (database) {
+      try {
+        database.config.lastWallpaperFolder = path.dirname(result.filePaths[0]);
+        database.save();
+      } catch (error) { log(`Could not remember wallpaper folder: ${error.message}`); }
     }
     return result.filePaths[0];
   });

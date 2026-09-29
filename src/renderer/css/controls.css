@@ -202,6 +202,10 @@ body .glass-confirm-backdrop { backdrop-filter:none!important;-webkit-backdrop-f
 body .glass-settings-drawer,body.window-glass-active .glass-settings-drawer,body.zen-mode #view-settings,body #view-settings,body #view-visualizer-drawer { transition:opacity 80ms linear!important; }
 body .glass-settings-drawer:not(.open) { opacity:0!important; }
 body .glass-settings-drawer.open { opacity:1!important; }
+/* Drawers share the shell's origin during native window drags. */
+body #app-shell > .glass-settings-drawer,
+body #app-shell > .glass-queue-drawer { position:absolute!important; }
+body #app-shell > .glass-titlebar { flex:0 0 48px; }
 body .glass-eq-modal,body .glass-context-menu { animation:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important; }
 
 body.window-fullscreen .window-resize-handle,body.is-maximized .window-resize-handle { display:none!important; }

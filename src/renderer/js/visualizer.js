@@ -149,6 +149,7 @@ class Visualizer {
       curtain: { strength: 1.5, width: .32, speed: 1 },
       palette: 'original',
       solidColor: '#38bdf8',
+      modeColors: Object.fromEntries(['wave','spectrum','sphere','bars','orb','ambient','reactive','curtain'].map(mode => [mode, { palette: 'original', solidColor: '#38bdf8' }])),
       hueShift: 0,
       quality: 'balanced', // 'low' | 'balanced' | 'high' | 'ultra'
       targetFps: 90, // Menu offers 60 or 90; legacy "unlimited" uses the 90 FPS clock.
@@ -363,20 +364,22 @@ class Visualizer {
 
   setPalette(name) {
     if (!['original','aurora','ocean','sunset','forest','solid'].includes(name)) return;
-    this.tuning.palette = name; this.applyVisualColor(); this.saveTuning();
+    this.tuning.modeColors[this.mode].palette = name;
+    this.applyVisualColor(); this.saveTuning();
   }
 
   setSolidColor(color) {
     if (!/^#[0-9a-f]{6}$/i.test(color)) return;
-    this.tuning.solidColor = color.toLowerCase(); this.setPalette('solid');
+    this.tuning.modeColors[this.mode].solidColor = color.toLowerCase(); this.setPalette('solid');
   }
 
   applyPalette(ctx) {
-    const name = this.tuning.palette || 'original';
+    const modeColor = this.tuning.modeColors?.[this.mode] || this.defaultTuning.modeColors[this.mode];
+    const name = modeColor?.palette || 'original';
     if (name === 'original') return;
     const palettes = { aurora: ['#38bdf8','#a78bfa','#f472b6'], ocean: ['#22d3ee','#3b82f6','#6366f1'], sunset: ['#fbbf24','#fb7185','#c084fc'], forest: ['#a3e635','#34d399','#2dd4bf'] };
     ctx.save(); ctx.globalCompositeOperation = 'source-in';
-    if (name === 'solid') ctx.fillStyle = this.tuning.solidColor || '#38bdf8';
+    if (name === 'solid') ctx.fillStyle = modeColor.solidColor || '#38bdf8';
     else {
       const colors = palettes[name] || palettes.aurora;
       const gradient = ctx.createLinearGradient(0,0,this.width,0);
@@ -552,6 +555,13 @@ class Visualizer {
             this.tuning[mode] = parsed[mode];
           }
         }
+        // Migrate the former global color choice without changing the look of existing skins.
+        for (const mode of Object.keys(this.defaultTuning.modeColors)) {
+          this.tuning.modeColors[mode] = {
+            palette: parsed.modeColors?.[mode]?.palette || parsed.palette || 'original',
+            solidColor: parsed.modeColors?.[mode]?.solidColor || parsed.solidColor || '#38bdf8'
+          };
+        }
       }
     } catch (e) {}
     // Earlier builds stored the 90 FPS clock rate as "unlimited".
@@ -595,6 +605,7 @@ class Visualizer {
       this.tuning.audioResponse = JSON.parse(JSON.stringify(this.defaultTuning.audioResponse));
     } else if (this.defaultTuning[mode]) {
       this.tuning[mode] = JSON.parse(JSON.stringify(this.defaultTuning[mode]));
+      this.tuning.modeColors[mode] = { ...this.defaultTuning.modeColors[mode] };
     }
     this.saveTuning();
   }
