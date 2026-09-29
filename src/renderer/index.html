@@ -956,14 +956,11 @@
           <div class="vis-fps-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding: 7px 12px; background: rgba(255, 255, 255, 0.04); border-radius: 9px; border: 1px solid rgba(255, 255, 255, 0.08);">
             <div style="font-size: 13px; color: var(--text-main); font-weight: 500; display: flex; align-items: center; gap: 8px;">
               <span>目标渲染帧率：</span>
-              <span id="vis-live-fps-badge" style="font-size: 11px; padding: 2px 7px; border-radius: 5px; background: rgba(56, 189, 248, 0.2); color: var(--accent-primary); font-weight: 700; border: 1px solid rgba(56, 189, 248, 0.35);">60 FPS</span>
+              <span id="vis-live-fps-badge" style="font-size: 11px; padding: 2px 7px; border-radius: 5px; background: rgba(56, 189, 248, 0.2); color: var(--accent-primary); font-weight: 700; border: 1px solid rgba(56, 189, 248, 0.35);">实时 -- FPS</span>
             </div>
             <select id="vis-target-fps-select" class="glass-select" style="padding: 4px 10px; font-size: 12px; background: rgba(255, 255, 255, 0.08); color: var(--text-main); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px; cursor: pointer; outline: none;">
               <option value="60">60 FPS (节能基准)</option>
-
-
-
-              <option value="unlimited" selected>稳定流畅 / 最高 60 FPS</option>
+              <option value="90" selected>90 FPS (稳定流畅)</option>
             </select>
           </div>
 

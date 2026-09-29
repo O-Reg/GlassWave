@@ -151,7 +151,7 @@ class Visualizer {
       solidColor: '#38bdf8',
       hueShift: 0,
       quality: 'balanced', // 'low' | 'balanced' | 'high' | 'ultra'
-      targetFps: 90, // 60 | 90 | 120 | 144 | 'unlimited'
+      targetFps: 90, // Menu offers 60 or 90; legacy "unlimited" uses the 90 FPS clock.
       audioResponse: {
         smoothFactor: 0.70, // 0% ~ 95%
         attackMs: 35,       // 0 ~ 300ms
@@ -554,6 +554,8 @@ class Visualizer {
         }
       }
     } catch (e) {}
+    // Earlier builds stored the 90 FPS clock rate as "unlimited".
+    if (this.tuning.targetFps === 'unlimited') this.tuning.targetFps = 90;
   }
 
   saveTuning() {

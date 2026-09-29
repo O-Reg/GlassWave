@@ -7975,9 +7975,9 @@ class UIController {
 
     const fpsSelect = document.getElementById('vis-target-fps-select');
     if (fpsSelect) {
-      fpsSelect.value = String(this.visualizer.tuning?.targetFps || 'unlimited');
+      fpsSelect.value = String(this.visualizer.tuning?.targetFps || 90);
       fpsSelect.addEventListener('change', (e) => {
-        const val = e.target.value === 'unlimited' ? 'unlimited' : parseInt(e.target.value, 10);
+        const val = parseInt(e.target.value, 10);
         this.visualizer.setTargetFps(val);
       });
     }
@@ -7987,7 +7987,7 @@ class UIController {
         const badge = document.getElementById('vis-live-fps-badge');
         if (badge && this.visualizer) {
           const fps = Math.round(this.visualizer.currentFps || 60);
-          badge.textContent = `${fps} FPS`;
+          badge.textContent = `实时 ${fps} FPS`;
         }
       }, 400);
     }
@@ -8231,7 +8231,7 @@ class UIController {
 
     // Quality & Target FPS
     setSelectVal('vis-quality-select', t.quality || 'balanced');
-    setSelectVal('vis-target-fps-select', String(t.targetFps || 'unlimited'));
+    setSelectVal('vis-target-fps-select', String(t.targetFps || 90));
 
     // Wave
     if (t.wave) {
