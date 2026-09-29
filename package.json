@@ -1,0 +1,54 @@
+{
+  "name": "glasswave",
+  "version": "1.2.0",
+  "description": "A high-quality, lightweight, visually gorgeous Windows local music player.",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "pack": "electron-builder --dir"
+  },
+  "keywords": [
+    "music-player",
+    "glassmorphism",
+    "audio-visualizer",
+    "windows"
+  ],
+  "author": "O Reg",
+  "license": "MIT",
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "music-metadata": "^7.14.0"
+  },
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.glasswave.player",
+    "productName": "GlassWave",
+    "files": [
+      "src/**/*",
+      "package.json",
+      "!**/.npm-cache/**"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "src/renderer/assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "GlassWave",
+      "uninstallDisplayName": "GlassWave Music Player"
+    },
+    "directories": {
+      "output": "dist"
+    }
+  }
+}

@@ -1,0 +1,2115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GlassWave</title>
+  <script src="js/frameClock.js"></script>
+  <script>
+    (function() {
+      try {
+        if (localStorage.getItem('glasswave_compact_sidebar_nav') === 'true') {
+          document.documentElement.classList.add('compact-sidebar-nav');
+        }
+        const savedGlassRatio = localStorage.getItem('glasswave_window_glass_ratio');
+        if (savedGlassRatio && Number(savedGlassRatio) > 0) {
+          document.documentElement.style.setProperty('--window-glass-ratio', Number(savedGlassRatio) / 100);
+          document.documentElement.classList.add('window-glass-active');
+        }
+        document.documentElement.classList.add('preload-nav-transition');
+        window.addEventListener('DOMContentLoaded', function() {
+          if (savedGlassRatio && Number(savedGlassRatio) > 0) {
+            document.body.classList.add('window-glass-active');
+          }
+          requestAnimationFrame(function() {
+            document.documentElement.classList.remove('preload-nav-transition');
+          });
+        });
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="css/glass.css">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/controls.css">
+<link rel="stylesheet" href="css/interfaceTheme.css">
+</head>
+<body class="theme-glass glass-body">
+  <!-- App Main Window Shell (Single continuous 14px rounded rectangle) -->
+  <div class="glass-app-shell" id="app-shell">
+
+    <!-- Hardware-Accelerated Luma Key Filter (Black / White Cutout Mask) -->
+    <svg style="position: absolute; width: 0; height: 0; pointer-events: none; overflow: hidden;" aria-hidden="true">
+      <defs>
+        <filter id="glass-luma-key-filter" color-interpolation-filters="sRGB">
+          <feColorMatrix type="matrix"
+            values="1 0 0 0 0
+                    0 1 0 0 0
+                    0 0 1 0 0
+                    0.333333 0.333333 0.333333 0 0" result="luma" />
+          <feComponentTransfer in="luma" result="mask">
+            <feFuncA id="luma-key-func-a" type="linear" slope="14" intercept="-2.1" />
+          </feComponentTransfer>
+          <feComposite in="SourceGraphic" in2="mask" operator="in" />
+        </filter>
+      </defs>
+    </svg>
+
+    <!-- Dynamic Color Extraction Ambient Glow Canvas (Background layer clipped to shell) -->
+    <canvas id="ambient-canvas" class="ambient-canvas ambient-mesh-canvas"></canvas>
+
+    <!-- Custom Wallpaper Background Layer (Requirement 4) -->
+    <div id="custom-bg-layer" class="custom-bg-layer">
+      <div id="custom-bg-image" class="custom-bg-image"></div>
+      <div class="custom-bg-glass-tint"></div>
+    </div>
+
+    <!-- Specular Noise Texture Overlay for Photorealistic Frosted Acrylic (Clipped to shell) -->
+    <div class="noise-overlay acrylic-noise-overlay"></div>
+
+    <!-- Titlebar (Full draggable top bar with titlebar-left / center / controls) -->
+    <header class="glass-titlebar" id="titlebar">
+      <div class="titlebar-left">
+        <div class="brand-header" id="brand-header">
+          <div class="brand-logo-wrap">
+            <img src="assets/brand-on-dark.png" class="brand-logo-icon brand-logo-badge" alt="GlassWave" style="width: 20px; height: 20px; border-radius: 5px; box-shadow: 0 0 10px rgba(56, 189, 248, 0.35); flex-shrink: 0; object-fit: contain;">
+            <span class="brand-name">GlassWave</span>
+          </div>
+
+          <div class="brand-header-divider"></div>
+
+          <!-- Interactive HiFi Audio Specification Popover Anchor -->
+          <div class="hifi-badge-wrap" id="hifi-badge" title="点击查看当前音频硬件指标、采样率精度与音质认证">
+            <div class="hifi-pulse-dot" id="hifi-pulse-dot"></div>
+            <div class="hifi-badge-content">
+              <span class="hifi-label-master" id="hifi-tier-label">MASTER</span>
+              <span class="hifi-label-core" id="hifi-status-label">HiFi</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Popover Info Card -->
+        <div class="glass-hifi-popover" id="hifi-popover" style="display:none;">
+          <div class="hifi-pop-header">
+            <span class="hifi-pop-title">GitLab 音频引擎指标</span>
+            <span class="hifi-badge-sub" id="hifi-dsp-sub">32 比特浮点</span>
+          </div>
+          <div class="hifi-specs-grid">
+            <div class="hifi-spec-cell">
+              <div class="spec-label">当前解码格式</div>
+              <div class="spec-val" id="spec-format">FLAC / WAV</div>
+            </div>
+            <div class="hifi-spec-cell">
+              <div class="spec-label">音频采样率</div>
+              <div class="spec-val" id="spec-samplerate">48,000 Hz</div>
+            </div>
+            <div class="hifi-spec-cell">
+              <div class="spec-label">量化采样精度</div>
+              <div class="spec-val" id="spec-bitrate">24-Bit / 1536 kbps</div>
+            </div>
+            <div class="hifi-spec-cell">
+              <div class="spec-label">硬件音质验证</div>
+              <div class="spec-val" id="spec-lossless">Master Certified</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Search Cluster & Interactive Three-Dot Popover Menu -->
+      <div class="titlebar-center">
+        <div class="search-cluster" id="search-cluster">
+          <div class="glass-search-box" id="glass-search-box">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="search-input" placeholder="搜索歌曲、艺术家、专辑、文件名、标签、分类..." spellcheck="false" autocomplete="off">
+            <button class="search-clear-btn" id="btn-search-clear" title="清空搜索" style="display:none;">&times;</button>
+            <span class="search-results-badge" id="search-results-count" style="display:none;">0 首</span>
+          </div>
+
+          <!-- Interactive Three-Dot More Button -->
+          <button class="search-more-btn" id="btn-search-more" title="按标签分类与曲库操作">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="5" cy="12" r="1.5" fill="currentColor"></circle>
+              <circle cx="12" cy="12" r="1.5" fill="currentColor"></circle>
+              <circle cx="19" cy="12" r="1.5" fill="currentColor"></circle>
+            </svg>
+          </button>
+
+          <!-- Glass Popover Menu (Tag Classification & Quick Operations) -->
+          <div class="search-more-popover" id="search-more-popover">
+            <!-- Header: Tag Classification State -->
+            <div class="pop-tag-header">
+              <div class="pop-tag-header-top">
+                <span class="pop-tag-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;vertical-align:-1px;margin-right:4px;">
+                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                    <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                  </svg>
+                  按标签分类筛选
+                </span>
+                <button class="pop-tag-reset-btn" id="pop-btn-reset-tags" title="清除所有标签筛选，显示全部歌曲">显示全部</button>
+              </div>
+              <div class="pop-tag-current-hint" id="pop-tag-current-hint">全部歌曲 · 无标签筛选</div>
+            </div>
+
+            <!-- Scrollable Tag List -->
+            <div class="pop-tag-sections-scroll" id="pop-tag-sections-scroll">
+              <div class="pop-tag-group">
+                <div class="pop-tag-group-title">心情风格</div>
+                <div class="pop-tag-chips-wrap" id="pop-chips-moods"></div>
+              </div>
+              <div class="pop-tag-group">
+                <div class="pop-tag-group-title">场景用途</div>
+                <div class="pop-tag-chips-wrap" id="pop-chips-usages"></div>
+              </div>
+              <div class="pop-tag-group">
+                <div class="pop-tag-group-header">
+                  <span class="pop-tag-group-title">自定义标签</span>
+                  <span class="pop-tag-count-hint" id="pop-custom-tag-count">0</span>
+                </div>
+                <div class="pop-tag-chips-wrap" id="pop-chips-custom"></div>
+                <!-- Inline Add Custom Tag -->
+                <div class="pop-add-tag-box">
+                  <input type="text" id="pop-input-new-tag" placeholder="新建自定义标签..." maxlength="20" spellcheck="false" autocomplete="off">
+                  <button id="pop-btn-add-tag" title="添加自定义标签">+ 添加</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="popover-divider"></div>
+            <div class="popover-item" id="pop-scan-library">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              <span>立即扫描监控目录</span>
+            </div>
+            <div class="popover-item" id="pop-add-folder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+              <span>添加音乐文件夹...</span>
+            </div>
+            <div class="popover-item" id="pop-clear-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+              <span>清空搜索与过滤条件</span>
+            </div>
+            <div class="popover-item" id="pop-restore-removed">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><polyline points="21 3 21 8 16 8"></polyline><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><polyline points="8 16 3 16 3 21"></polyline></svg>
+              <span>恢复所有从曲库移出的歌曲</span>
+            </div>
+            <div class="popover-divider"></div>
+            <div class="popover-item" id="pop-switch-theme">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 0 0 20z" fill="currentColor"></path></svg>
+              <span>皮肤与环境光配色...</span>
+            </div>
+            <div class="popover-item" id="pop-custom-bg">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+              <span>自定义背景图片...</span>
+            </div>
+            <div class="popover-item" id="pop-reset-bg">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><polyline points="21 3 21 8 16 8"></polyline><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><polyline points="8 16 3 16 3 21"></polyline></svg>
+              <span>重置视觉效果</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Window Controls -->
+      <div class="window-controls">
+        <button class="win-btn mode-off" id="btn-pin-mode" title="窗口置顶: 不置顶 (点击切换播放时置顶)">
+          <!-- Mode 1: 不置顶 (Slashed pushpin) -->
+          <svg class="pin-icon pin-icon-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="3" x2="21" y2="21" stroke-width="2.2"></line>
+            <path d="M10 4.5l2-1.5h4v2l-1.5 1.5"></path>
+            <path d="M7 14v2h10v-2"></path>
+            <line x1="12" y1="16" x2="12" y2="21"></line>
+            <path d="M10 10v1l-3 3"></path>
+          </svg>
+          <!-- Mode 2: 播放式置顶 (Pushpin with embedded Play badge) -->
+          <svg class="pin-icon pin-icon-playing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+            <path d="M16 3H8v2l2 2v4l-3 3v2h10v-2l-3-3V7l2-2V3z"></path>
+            <line x1="12" y1="16" x2="12" y2="21"></line>
+            <polygon points="11 8 14.5 10 11 12" fill="currentColor" stroke="none"></polygon>
+          </svg>
+          <!-- Mode 3: 永久置顶 (Solid filled active Pushpin) -->
+          <svg class="pin-icon pin-icon-always" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+            <path d="M16 3H8v2l2 2v4l-3 3v2h10v-2l-3-3V7l2-2V3z"></path>
+            <line x1="12" y1="16" x2="12" y2="21" stroke-width="2.2"></line>
+            <circle cx="12" cy="10" r="1.6" fill="#141724" stroke="none"></circle>
+          </svg>
+        </button>
+        <button class="win-btn" id="btn-mini-mode" title="超级极简迷你窄条 (M)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="14" width="18" height="6" rx="2"></rect>
+            <circle cx="7" cy="17" r="1" fill="currentColor"></circle>
+            <line x1="11" y1="17" x2="18" y2="17"></line>
+          </svg>
+        </button>
+        <button class="win-btn" id="btn-zen-mode" title="极简纯享模式">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="3" width="18" height="18" rx="3.5" stroke-dasharray="3 2"></rect>
+            <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
+          </svg>
+        </button>
+        <button class="win-btn" id="btn-minimize" title="最小化">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
+        <div class="snap-btn-wrap" id="snap-btn-wrap" style="position: relative; display: inline-flex;">
+          <button class="win-btn" id="btn-maximize" title="最大化 (双击 / 悬停查看 Windows 11 分屏布局)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="5" y="5" width="14" height="14" rx="2"></rect>
+            </svg>
+          </button>
+          <!-- Windows 11 Snap Layouts Popover Flyout -->
+          <div class="snap-layouts-popover" id="snap-layouts-popover" style="display: none;">
+            <div class="snap-layouts-header">Windows 11 分屏对齐布局</div>
+            <div class="snap-layouts-grid">
+              <!-- Layout 1: Left / Right 1/2 -->
+              <div class="snap-card" title="左右对半 (50% / 50%)">
+                <div class="snap-tile" data-snap="left-half" title="靠左半屏 (Win+←)"></div>
+                <div class="snap-tile" data-snap="right-half" title="靠右半屏 (Win+→)"></div>
+              </div>
+              <!-- Layout 2: Left 2/3 / Right 1/3 -->
+              <div class="snap-card" title="左主右副 (65% / 35%)">
+                <div class="snap-tile" style="flex:2;" data-snap="left-two-thirds" title="左侧宽屏 (65%)"></div>
+                <div class="snap-tile" style="flex:1;" data-snap="right-one-third" title="右侧窄屏 (35%)"></div>
+              </div>
+              <!-- Layout 3: 4 Quarters 1/4 -->
+              <div class="snap-card snap-card-grid" title="四分屏 (25% 各占一角)">
+                <div class="snap-tile" data-snap="top-left" title="左上四分之一屏"></div>
+                <div class="snap-tile" data-snap="top-right" title="右上四分之一屏"></div>
+                <div class="snap-tile" data-snap="bottom-left" title="左下四分之一屏"></div>
+                <div class="snap-tile" data-snap="bottom-right" title="右下四分之一屏"></div>
+              </div>
+              <!-- Layout 4: Maximize & Restore -->
+              <div class="snap-card" title="全屏最大化 / 还原">
+                <div class="snap-tile" style="flex:1;" data-snap="maximize" title="全屏最大化"></div>
+                <div class="snap-tile" style="flex:1;" data-snap="restore" title="恢复窗口预设大小"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button class="win-btn btn-close" id="btn-close" title="关闭">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+            <line x1="6" y1="18" x2="18" y2="6"></line>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Zen Mode Floating Top-Right Mode Button (Auto-hidden, visible on hover over top-right) -->
+    <div class="zen-floating-actions" id="zen-floating-actions">
+      <button class="zen-floating-toggle zen-floating-minimize" id="btn-zen-float-minimize" title="最小化窗口" aria-label="最小化窗口">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M5 12h14"></path>
+        </svg>
+        <span>最小化</span>
+      </button>
+      <button class="zen-floating-toggle" id="btn-zen-float-exit" title="退出极简纯享模式 (Esc)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path>
+        </svg>
+        <span>退出极简</span>
+      </button>
+    </div>
+
+    <!-- Normal Mode Floating Left Sidebar Expand Tab (Reveals on hover near left edge when sidebar is collapsed) -->
+    <button class="sidebar-expand-tab" id="btn-expand-sidebar" title="展开侧边栏">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="9 18 15 12 9 6"></polyline>
+      </svg>
+    </button>
+
+    <!-- Main Workspace -->
+    <main class="glass-main-content">
+
+      <!-- Left Navigation / Quick Library -->
+      <aside class="glass-sidebar" id="sidebar">
+        <!-- 1. Top Fixed Navigation -->
+        <div class="sidebar-top-nav">
+          <div class="sidebar-nav-header">
+            <span class="sidebar-nav-heading">导航</span>
+            <button class="sidebar-collapse-btn" id="btn-collapse-sidebar" title="收起侧边栏 (鼠标靠左可浮动呼出展开按钮)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
+          </div>
+          <nav class="nav-group">
+
+            <button class="nav-item active" data-view="player" data-tooltip="正在播放">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polygon points="10 8 16 12 10 16 10 8"></polygon>
+              </svg>
+              <span>正在播放</span>
+            </button>
+            <button class="nav-item" data-view="library" data-subview="all" data-tooltip="全部歌曲">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 18V5l12-2v13"></path>
+                <circle cx="6" cy="18" r="3"></circle>
+                <circle cx="18" cy="16" r="3"></circle>
+              </svg>
+              <span>全部歌曲</span>
+              <span class="badge" id="library-count">0</span>
+            </button>
+            <button class="nav-item" data-view="library" data-subview="favorites" data-tooltip="我的收藏">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+              </svg>
+              <span>我的收藏</span>
+              <span class="badge" id="fav-count">0</span>
+            </button>
+            <button class="nav-item" data-view="library" data-subview="recent" data-tooltip="最近播放">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              <span>最近播放</span>
+            </button>
+            <button class="nav-item" data-view="library" data-subview="added" data-tooltip="最近添加">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              <span>最近添加</span>
+            </button>
+            <button class="nav-item" data-view="folders" data-tooltip="音乐目录">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <span>音乐目录</span>
+            </button>
+            <button class="nav-item" data-view="settings" data-tooltip="系统设置">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+              <span>系统设置</span>
+            </button>
+          </nav>
+        </div>
+
+        <!-- 2. Middle Scrollable Library Area ("我的分类", 播放列表, 独立可滚动) -->
+        <div class="sidebar-scroll-content" id="sidebar-scroll-content">
+          <div class="sidebar-category-section">
+            <div class="category-header">
+              <div class="category-title-toggle" id="btn-toggle-categories" title="展开/收起我的分类">
+                <svg class="chevron-icon" id="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                <span>我的分类</span>
+              </div>
+              <button class="btn-add-cat-icon" id="btn-create-category-quick" title="新建分类">+</button>
+            </div>
+            <div class="category-list" id="sidebar-category-list">
+              <!-- Dynamic Category Items -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Bottom Fixed Visual Mode Panel -->
+        <div class="sidebar-bottom-panel">
+          <div class="sidebar-visualizer-picker">
+            <div class="picker-label-row" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <div class="picker-label clickable-menu-label" id="btn-open-vis-menu" title="点击打开视觉模式专属菜单" style="margin-bottom: 0; cursor: pointer; display: flex; align-items: center; gap: 4px; user-select: none;">
+                <span>视觉模式</span>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" style="opacity: 0.6;"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <button class="glass-icon-btn btn-vis-tune-shortcut" id="btn-vis-tune-shortcut" title="视觉模式微调与专属菜单" style="width: 20px; height: 20px; padding: 2px; border-radius: 5px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.12); color: var(--text-dim); display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                </button>
+                <button class="glass-dot-toggle-btn active" id="btn-toggle-visualizer" title="开启或关闭视觉频谱显示">
+                  <span class="dot-led"></span>
+                  <span class="dot-label">开</span>
+                </button>
+              </div>
+            </div>
+            <div class="visualizer-tabs" id="visualizer-tabs">
+              <button class="vis-tab active" data-mode="wave">波形</button>
+              <button class="vis-tab" data-mode="spectrum">环形</button>
+              <button class="vis-tab" data-mode="sphere">球形</button>
+              <button class="vis-tab" data-mode="bars">柱谱</button>
+              <button class="vis-tab" data-mode="orb">粒子</button>
+              <button class="vis-tab" data-mode="ambient">流光</button>
+<button class="vis-tab" data-mode="reactive">律动线</button>
+<button class="vis-tab" data-mode="curtain">光幕</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center Stage: Player Immersive View -->
+      <section class="player-stage" id="view-player">
+        <!-- Top Half: Album Cover & Typography -->
+        <div class="parallax-container" id="parallax-deck">
+          <!-- Album Cover Frame with Glassmorphism Bezel -->
+          <div class="album-art-wrap" id="album-wrap" draggable="false">
+            <div class="album-art-glass">
+              <img id="current-cover" draggable="false" class="cover-image" src="" alt="Album Artwork" style="display:none;">
+              <div id="default-cover" class="default-cover-placeholder">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M9 18V5l12-2v13"></path>
+                  <circle cx="6" cy="18" r="3"></circle>
+                  <circle cx="18" cy="16" r="3"></circle>
+                </svg>
+                <div class="pulse-ring"></div>
+              </div>
+              <div class="cover-specular-highlight"></div>
+            </div>
+          </div>
+
+          <!-- Song Meta Typography -->
+          <div class="track-meta" id="track-meta">
+            <h1 class="track-title" id="track-title">GlassWave</h1>
+            <h2 class="track-artist" id="track-artist">启动即享 · 纯粹流动之声</h2>
+            <div class="track-album-badge" id="track-album">准备就绪</div>
+          </div>
+        </div>
+
+        <!-- Dedicated Responsive Visualizer Stage Zone (Layer 1: Behind UI) -->
+        <div class="visualizer-stage-zone" id="visualizer-canvas-container">
+          <canvas id="visualizer-canvas" class="visualizer-canvas"></canvas>
+        </div>
+      </section>
+
+      <!-- Music Library View (Hidden by default) -->
+      <section class="library-stage glass-stage" id="view-library" style="display:none;">
+        <div class="stage-header">
+          <div class="stage-title-wrap">
+            <h2 id="library-view-title">本地音乐库</h2>
+            <span class="sub-count-badge" id="library-sub-count">0 首</span>
+          </div>
+
+          <!-- Sort and Library Actions -->
+          <div class="stage-actions">
+            <!-- Redesigned Custom Glassmorphism Sort Control -->
+            <div class="glass-sort-group">
+              <div class="custom-sort-dropdown" id="sort-dropdown">
+                <button class="sort-dropdown-btn" id="btn-sort-dropdown" title="更改排序依据">
+                  <span class="sort-selected-text" id="sort-selected-label">默认排序</span>
+                  <svg class="sort-chevron-icon" id="sort-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+                <div class="sort-dropdown-menu" id="sort-dropdown-menu" style="display:none;">
+                  <div class="sort-menu-item active" data-sort="default">默认排序</div>
+                  <div class="sort-menu-item" data-sort="title">歌曲名称</div>
+                  <div class="sort-menu-item" data-sort="artist">艺术家</div>
+                  <div class="sort-menu-item" data-sort="album">专辑</div>
+                  <div class="sort-menu-item" data-sort="dateAdded">添加时间</div>
+                  <div class="sort-menu-item" data-sort="duration">播放时长</div>
+                </div>
+              </div>
+
+              <!-- Direction Toggle Button with Clean Fine-Line SVG -->
+              <button class="sort-dir-toggle-btn" id="btn-sort-dir" title="当前：降序 (点击切换升序)">
+                <svg class="sort-dir-icon" id="sort-dir-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 4h13M3 8h9M3 12h5m8 3l3 3m0 0l3-3m-3 3V8"/>
+                </svg>
+              </button>
+            </div>
+
+            <button class="glass-pill-btn" id="btn-refresh-all-meta" title="重新深度扫描所有封套、匹配封面图片并修正艺术家标签">刷新封面与标签</button>
+            <button class="glass-pill-btn" id="btn-scan-library">立即扫描</button>
+            <button class="glass-pill-btn" id="btn-add-music-folder">+ 添加音乐文件夹</button>
+          </div>
+        </div>
+
+        <!-- Tag Multi-Filter Pill Bar -->
+        <div class="tag-filter-bar" id="tag-filter-bar">
+          <span class="tag-bar-label">标签筛选:</span>
+          <div class="tag-pill-container" id="tag-pill-container">
+            <!-- Dynamically populated tag chips -->
+          </div>
+          <button class="glass-pill-btn btn-clear-tags" id="btn-clear-tag-filters" style="display:none;">清空筛选</button>
+        </div>
+
+        <!-- Batch Selection Action Bar (Shown when multi-selected) -->
+        <div class="batch-action-bar" id="batch-action-bar" style="display:none;">
+          <div class="batch-selected-info">
+            已选择 <span id="batch-selected-count">0</span> 首歌曲
+          </div>
+          <div class="batch-actions-group">
+            <button class="glass-pill-btn" id="btn-batch-add-category">添加到分类</button>
+            <button class="glass-pill-btn" id="btn-batch-add-tags">添加标签</button>
+            <button class="glass-pill-btn" id="btn-batch-add-queue">加入播放队列</button>
+            <button class="glass-pill-btn" id="btn-batch-favorite">收藏</button>
+            <button class="glass-pill-btn" id="btn-batch-remove-cat" style="display:none;">从当前分类移除</button>
+            <button class="glass-pill-btn" id="btn-batch-remove-lib">从音乐库移除</button>
+            <button class="glass-pill-btn btn-danger-pill" id="btn-batch-delete-file">删除本地文件</button>
+            <button class="glass-pill-btn" id="btn-batch-clear-selection">取消选择</button>
+          </div>
+        </div>
+
+        <!-- Virtual Scrollable Track List -->
+        <div class="track-list-scroll-view" id="track-list-scroll-view">
+          <div class="virtual-scroll-spacer" id="virtual-scroll-spacer"></div>
+          <div class="virtual-track-list" id="track-list-container">
+            <div class="empty-hint">音乐库暂无歌曲，将音乐放入库文件夹或点击上方添加目录即可自动发现。</div>
+          </div>
+        </div>
+
+        <!-- Vertical Alphabet Index Bar (A-Z + # Quick Navigation) -->
+        <div class="alphabet-index-bar" id="alphabet-index-bar"></div>
+
+        <!-- macOS-Style Overlay Capsule Scrollbar (Requirement 9) -->
+        <div class="custom-overlay-scrollbar-track" id="tracklist-scrollbar-track">
+          <div class="custom-overlay-scrollbar-thumb" id="tracklist-scrollbar-thumb"></div>
+        </div>
+      </section>
+
+      <!-- Monitored Music Folders View (Hidden by default) -->
+      <section class="library-stage glass-stage" id="view-folders" style="display:none;">
+        <div class="stage-header">
+          <h2>监控音乐目录</h2>
+          <div class="stage-actions">
+            <button class="glass-pill-btn" id="btn-add-folder-manage">+ 添加新目录</button>
+          </div>
+        </div>
+        <div class="folder-list-container" id="folder-list-container" style="padding: 24px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto;">
+          <div class="empty-hint">正在读取监控目录...</div>
+        </div>
+      </section>
+
+      <!-- Slide-out Glass Settings Drawer (Right Side, Non-fullscreen, Live Adjustment) -->
+      <aside class="glass-settings-drawer settings-stage" id="view-settings">
+        <!-- Main Settings Header -->
+        <div class="settings-drawer-header" id="settings-header-main">
+          <div class="settings-drawer-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:20px;height:20px;color:var(--accent-primary);">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            <span>系统设置</span>
+          </div>
+          <div class="settings-drawer-actions">
+            <button class="glass-icon-btn btn-close-settings" id="btn-close-settings" title="关闭设置">&times;</button>
+          </div>
+        </div>
+
+        <!-- Backward-compat hidden placeholder for test runner -->
+        <div id="settings-header-sub" style="display: none;">
+          <button id="btn-back-settings-main" style="display: none;"></button>
+          <button id="btn-close-settings-sub" style="display: none;"></button>
+        </div>
+
+        <div class="settings-content" id="settings-panel-main">
+          <div class="setting-item">
+            <div class="setting-info">
+              <div class="setting-title">极简横排导航 Dock 模式 (Compact Sidebar Dock)</div>
+              <div class="setting-desc">将左侧栏顶部 7 项菜单浓缩为单行极简图标 Dock，鼠标悬停浮现气泡提示，为「我的分类」释放最大化浏览空间</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setting-compact-sidebar-nav">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <!-- 启动与续播设置 (Startup & Playback Modes) -->
+          <div class="setting-item" id="setting-item-autoplay">
+            <div class="setting-info">
+              <div class="setting-title">打开软件自动播放 (Auto Play On Launch)</div>
+              <div class="setting-desc">打开软件后自动开始播放音乐，无需手动点击播放按钮</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setting-autoplay" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="setting-item" id="setting-item-launch-shuffle">
+            <div class="setting-info">
+              <div class="setting-title">开启软件随机播放 (Shuffle Queue On Launch)</div>
+              <div class="setting-desc">打开软件时，从播放队列中随机选取任意一首歌曲，并固定从 00:00 从头播放</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setting-launch-shuffle">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="setting-item" id="setting-item-remember-progress" style="transition: opacity 0.25s ease, filter 0.25s ease;">
+            <div class="setting-info">
+              <div class="setting-title">记忆歌曲断点进度 (Remember Playback Progress)</div>
+              <div class="setting-desc" id="setting-desc-remember-progress">关闭后，打开软件重新播放歌曲时将一律从 00:00 从头起播，不再恢复上次听了一半的秒数</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setting-remember-progress" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <div class="setting-title">拖入歌曲自动入库 (Auto-Add Dropped Files)</div>
+              <div class="setting-desc">将音乐文件或文件夹拖入播放器时，自动添加到本地音乐库数据库，不再每次弹窗询问</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setting-auto-add-dropped">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <div class="setting-title">鼠标轻微视差 (Mouse Parallax)</div>
+              <div class="setting-desc">鼠标移动时唱片封面与玻璃面板呈现克制立体浮动</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setting-parallax" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+          <!-- Custom Wallpaper Background (Requirement 4) -->
+          <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 14px;">
+            <div class="setting-info">
+              <div class="setting-title">自定义背景图片 (Custom Wallpaper)</div>
+              <div class="setting-desc">使用自己的图片作为播放器背景，配备亚克力磨砂玻璃质感与鼠标 3D 视差微动，并支持一键恢复默认光效</div>
+            </div>
+            <div class="custom-bg-controls" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <button class="glass-pill-btn" id="btn-choose-custom-bg">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" style="vertical-align: -2px; margin-right: 6px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                选择本地背景图片...
+              </button>
+              <button class="glass-pill-btn" id="btn-rotate-custom-bg" title="顺时针旋转背景图片 90° (当前：0°)">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" style="vertical-align: -2px; margin-right: 6px;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                旋转 90° (<span id="lbl-bg-rotate">0°</span>)
+              </button>
+              <button class="glass-pill-btn btn-bg-luma-key" id="btn-bg-luma-key" title="切换背景抠图：关闭、黑底、白底" aria-pressed="false">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" style="vertical-align: -2px; margin-right: 5px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"></path></svg>
+                背景抠图 (<span id="lbl-bg-luma-status">关</span>)
+              </button>
+              <button class="glass-pill-btn btn-reset-visual-effects" id="btn-reset-custom-bg" title="一键重置并恢复默认视觉效果与动态流光">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" style="vertical-align: -2px; margin-right: 5px;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><polyline points="21 3 21 8 16 8"></polyline><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><polyline points="8 16 3 16 3 21"></polyline></svg>
+                重置视觉效果
+              </button>
+              <span id="custom-bg-status" style="font-size: 12px; color: var(--text-dim); margin-left: 4px;">当前：默认流体光效</span>
+            </div>
+            <!-- Frosted Glass Blur, Opacity, Position & Pure Mode Controls -->
+            <div class="custom-bg-sliders-box" style="display: flex; flex-direction: column; gap: 12px; margin-top: 6px; padding: 14px 16px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06);">
+              <!-- 1. Theme Color Tint / Dyeing Degree (0% to 100%) -->
+              <div class="custom-bg-slider-row" id="row-bg-tint-degree" style="display: flex; flex-direction: column; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); font-weight: 500;">
+                    主题与滤镜染色程度：<span id="lbl-bg-tint-degree" style="color: var(--accent-primary); font-weight: 600;">0% (完全无染色 / 纯净高饱和原色)</span>
+                  </div>
+                  <div style="font-size: 12px; color: var(--text-dim);">0% 消除偏绿与暗色滤镜 · 100% 深度融入主题光</div>
+                </div>
+                <input type="range" id="setting-bg-tint-degree" min="0" max="100" step="1" value="0" class="glass-slider" style="width: 100%;" title="控制主题色彩染色程度：0% 为彻底无染色高饱和原色，消除偏绿、杂色与暗沉滤镜；向右滑动逐步融入主题环境光与暗调">
+                <!-- Compatibility hidden elements for automated test suite -->
+                <input type="range" id="setting-bg-pure-ratio" min="0" max="100" step="1" value="100" style="display: none;">
+                <span id="lbl-bg-pure-ratio" style="display: none;">100% (极度纯透)</span>
+                <input type="checkbox" id="setting-bg-pure-mode" style="display: none;">
+              </div>
+
+              <!-- 1.5 Mutually exclusive black / white background cutout -->
+              <div class="custom-bg-slider-row fixed-parameter-block" id="row-bg-luma-threshold">
+                <div class="parameter-heading">背景抠图阈值<span id="lbl-bg-luma-threshold">0%</span></div>
+                <div class="luma-color-grid" role="group" aria-label="背景抠图模式"><button class="glass-pill-btn" type="button" id="btn-luma-color-off">关闭</button><button class="glass-pill-btn" type="button" id="btn-luma-color-black">黑底</button><button class="glass-pill-btn" type="button" id="btn-luma-color-white">白底</button></div>
+                <input type="range" id="setting-bg-luma-threshold" min="0" max="70" step="1" value="0" class="glass-slider" aria-label="背景抠图阈值">
+                <div class="luma-preset-grid"><button class="glass-pill-btn" id="btn-luma-mode-toggle">边缘：清晰</button><button class="glass-pill-btn" id="btn-luma-preset-pure">纯黑底</button><button class="glass-pill-btn" id="btn-luma-preset-dark">深灰底</button></div>
+                <p class="setting-desc">选择黑底或白底，阈值越高，更多接近底色的区域变透明；角色上相同亮度的细节也可能受影响。桌面透光设为 100% 可显示背后的窗口。</p>
+              </div>
+
+              <!-- 2. Vertical & Horizontal Focus Position Sliders (0% to 100%) -->
+              <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                <div style="font-size: 13px; color: var(--text-main); min-width: 150px;">图片垂直焦点位置：<span id="lbl-bg-pos-y" style="color: var(--accent-primary); font-weight: 600;">50% (居中)</span></div>
+                <input type="range" id="setting-bg-pos-y" min="0" max="100" step="1" value="50" class="glass-slider" style="flex: 1;" title="从图片顶部(0%)滑动到底部(100%)，保证无黑边且不露出底图外区域">
+              </div>
+
+              <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                <div style="font-size: 13px; color: var(--text-main); min-width: 150px;">图片水平焦点位置：<span id="lbl-bg-pos-x" style="color: var(--accent-primary); font-weight: 600;">50% (居中)</span></div>
+                <input type="range" id="setting-bg-pos-x" min="0" max="100" step="1" value="50" class="glass-slider" style="flex: 1;" title="从图片左侧(0%)滑动到右侧(100%)，保证无黑边且不露出底图外区域">
+              </div>
+
+              <!-- 2.5 Image Zoom / Scale Controls (- / + / Fit / Reset / Slider) -->
+              <div class="custom-bg-slider-row" id="row-bg-zoom" style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+                  <div style="font-size: 13px; color: var(--text-main); font-weight: 500;">图片缩放比例：<span id="lbl-bg-zoom" style="color: var(--accent-primary); font-weight: 600;">100% (自适应 Fit)</span></div>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <button class="glass-pill-btn" id="btn-bg-zoom-out" style="padding: 2px 8px; font-size: 13px; font-weight: 700; min-width: 28px;" title="缩小 5%">-</button>
+                    <button class="glass-pill-btn" id="btn-bg-zoom-in" style="padding: 2px 8px; font-size: 13px; font-weight: 700; min-width: 28px;" title="放大 5%">+</button>
+                    <button class="glass-pill-btn" id="btn-bg-zoom-fit" style="padding: 2px 10px; font-size: 12px;" title="自适应窗口并最小化裁切 (Fit)">Fit 自适应</button>
+                    <button class="glass-pill-btn" id="btn-bg-zoom-reset" style="padding: 2px 10px; font-size: 12px;" title="重置缩放到 100%">重置</button>
+                  </div>
+                </div>
+                <input type="range" id="setting-bg-zoom" min="50" max="250" step="1" value="100" class="glass-slider" style="width: 100%;" title="自定义背景图片缩放比例：默认 100% 为最小裁切全屏自适应，向右滑动可进一步放大画面细节">
+              </div>
+
+              <!-- 3. Blur Slider -->
+              <div class="stable-slider-row custom-bg-slider-row" id="row-bg-blur" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                <div style="font-size: 13px; color: var(--text-main); min-width: 150px;">毛玻璃磨砂强度：<span id="lbl-bg-blur" style="color: var(--accent-primary); font-weight: 600;">14px</span></div>
+                <input type="range" id="setting-bg-blur" min="0" max="36" step="1" value="14" class="glass-slider" style="flex: 1;">
+              </div>
+
+              <!-- 4. Opacity Slider -->
+              <div class="stable-slider-row custom-bg-slider-row" id="row-bg-opacity" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                <div style="font-size: 13px; color: var(--text-main); min-width: 150px;">画面半透明度 / 不透明度：<span id="lbl-bg-opacity" style="color: var(--accent-primary); font-weight: 600;">85% (半透明透光)</span></div>
+                <input type="range" id="setting-bg-opacity" min="0" max="1.0" step="0.05" value="0.85" class="glass-slider" style="flex: 1;" title="调节画面半透明度：100% 为实体不透明原图，调低可呈现细腻半透明效果，透出底层纯净毛玻璃">
+              </div>
+            </div>
+          </div>
+
+          <!-- 全局软件亚克力玻璃通透度 (Window Acrylic Glass Opacity) -->
+          <div class="setting-item" id="row-window-glass-opacity" style="flex-direction: column; align-items: stretch; gap: 12px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+              <div class="setting-info">
+                <div class="setting-title">界面亚克力通透度 (Window Glass Opacity)</div>
+                <div class="setting-desc">让软件主背景与播放舞台变得通透，透视 Windows 桌面与其他软件；字体、滑条、按钮保持 100% 高对比度实体感</div>
+              </div>
+              <div style="font-size: 13px; color: var(--accent-primary); font-weight: 600; white-space: nowrap;" id="lbl-window-glass-ratio">0% (标准深邃)</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <input type="range" id="setting-window-glass-ratio" min="0" max="100" step="1" value="0" class="glass-slider" style="flex: 1;" title="拖动调节侧栏、播放栏和菜单背景的通透度，不改变角色图片与桌面底幕">
+              <button class="glass-pill-btn" id="btn-reset-window-glass" style="padding: 3px 10px; font-size: 12px; white-space: nowrap;" title="重置为默认深邃毛玻璃 (0%)">重置</button>
+            </div>
+          </div>
+          <!-- Visualizer Position & Scale Controls (Requirement 2 & Fullscreen Expansion) -->
+          <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 14px;">
+            <div class="setting-info">
+              <div class="setting-title">频谱与光球视觉定位与大小 (Visualizer Position & Scale)</div>
+              <div class="setting-desc">自由控制光球与环形/球形/横向频谱的核心锚定基准位置、垂直偏移与全局缩放倍率（全屏下自动大幅扩展）</div>
+            </div>
+            <!-- Position Presets Button Group -->
+            <div class="vis-pos-group" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span style="font-size: 13px; color: var(--text-muted); margin-right: 4px;">核心基准位置：</span>
+              <button class="glass-pill-btn vis-pos-btn" data-pos="behind">封面正后方 (Behind Album)</button>
+              <button class="glass-pill-btn vis-pos-btn" data-pos="below">封面正下方 (Below Album)</button>
+              <button class="glass-pill-btn vis-pos-btn active" data-pos="center">屏幕视窗中心 (Screen Center)</button>
+            </div>
+            <!-- Sliders Box -->
+            <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06);">
+              <div class="stable-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                <div style="font-size: 13px; color: var(--text-main); min-width: 130px;">垂直高度微调：<span id="lbl-vis-offset-y" style="color: var(--accent-primary); font-weight: 600;">0px</span></div>
+                <input type="range" id="setting-vis-offset-y" min="-180" max="180" step="5" value="0" class="glass-slider" style="flex: 1;">
+              </div>
+              <div class="stable-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                <div style="font-size: 13px; color: var(--text-main); min-width: 130px;">视觉元素大小倍率：<span id="lbl-vis-scale" style="color: var(--accent-primary); font-weight: 600;">1.25x</span></div>
+                <input type="range" id="setting-vis-scale" min="0.7" max="2.8" step="0.05" value="1.25" class="glass-slider" style="flex: 1;">
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-item" style="flex-direction:column;align-items:stretch">
+            <div class="stable-slider-row"><div>桌面透光程度<span id="lbl-desktop-reveal">0%</span></div><input id="setting-desktop-reveal" type="range" class="glass-slider" min="0" max="100" step="1" value="0" aria-label="桌面透光程度"></div>
+            <p class="setting-desc">只调整底幕透明度，不降低角色图片的不透明度。可搭配黑底或白底抠图使用。</p>
+          </div>
+          <!-- Visualizer Dedicated Menu Entry Card -->
+          <div class="setting-item setting-card-nav" id="row-vis-advanced-entry" style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(168, 85, 247, 0.08)); border: 1px solid rgba(138, 196, 255, 0.25); border-radius: 12px; padding: 14px 16px; margin: 4px 0 6px 0; display: flex; align-items: center; justify-content: space-between; gap: 14px;">
+            <div class="setting-info" style="flex: 1;">
+              <div class="setting-title" style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent-primary);">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+                <span>视觉模式设置 (Visualizer Mode Menu)</span>
+              </div>
+              <div class="setting-desc" style="margin-top: 4px;">微调波形粗细/光晕、环形内径/柱数、球形自转速度与柱谱水波漫反射（独立专属菜单）</div>
+            </div>
+            <button class="glass-pill-btn" id="btn-open-vis-advanced" style="padding: 6px 14px; font-weight: 500; display: flex; align-items: center; gap: 6px; background: rgba(138, 196, 255, 0.18); border-color: rgba(138, 196, 255, 0.45); color: #ffffff; white-space: nowrap; cursor: pointer;">
+              <span>打开视觉模式菜单</span>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+          </div>
+
+          <!-- Skin & Ambient Color Themes (Requirement 4) -->
+          <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 14px;">
+            <div class="setting-info">
+              <div class="setting-title">环境光与皮肤配色 (Skin & Ambient Themes)</div>
+              <div class="setting-desc">提供多款高质感深色亚克力毛玻璃环境光预设，支持一键切换并同步所有流光、波形与高光</div>
+            </div>
+            <div class="theme-preset-grid" id="theme-preset-grid">
+              <!-- Dynamically populated theme cards -->
+            </div>
+          </div>
+
+          <!-- 24 Minimalist Pure Color Palette (Requirement: 纯色效果，小一点，密集排列，至少20种，整体极简) -->
+          <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 12px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+              <div class="setting-info">
+                <div class="setting-title">极简纯色底色 (24 种极简纯色板)</div>
+                <div class="setting-desc">小巧密集排列，一键切换极简纯净单色底色，并与毛玻璃面板及环境微光联动</div>
+              </div>
+              <button class="glass-pill-btn" id="btn-reset-pure-color" style="font-size: 11px; padding: 4px 10px; display: none;">恢复默认底色</button>
+            </div>
+            <div class="pure-color-dense-grid" id="pure-color-dense-grid">
+              <!-- Dynamically populated 24 pure color swatches -->
+            </div>
+          </div>
+
+          <!-- Ambient Glow & Orbs Customization (Requirement: 炫光变单色/关闭、动态光球深度自定义) -->
+          <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 14px;">
+            <div class="setting-info">
+              <div class="setting-title">动态环境炫光与背景光球自定义 (Ambient Glow & Orbs)</div>
+              <div class="setting-desc">背景炫光可一键开启/关闭、切换为统一单色或全彩流光，并细致调节动态光球数量、速度与亮度</div>
+            </div>
+            <div class="ambient-glow-controls-box" style="display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06);">
+              <!-- 1. Ambient Glow Master Switch (一键关闭/开启背景炫光) -->
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                <div class="setting-info">
+                  <div style="font-size: 13px; font-weight: 500; color: var(--text-main);">背景环境炫光总开关 (Ambient Glow)</div>
+                  <div style="font-size: 12px; color: var(--text-dim);">关闭后彻底隐藏背景流动光效，呈现极致纯粹的沉浸深色/纯色画布</div>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="setting-glow-enabled" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+
+              <!-- 2. Glow Color Mode: Multicolor vs Monochrome (单色炫光选项) -->
+              <div id="row-glow-mode" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                <div class="setting-info">
+                  <div style="font-size: 13px; font-weight: 500; color: var(--text-main);">炫光色彩模式 (Glow Mode)</div>
+                  <div style="font-size: 12px; color: var(--text-dim);">支持将背景多色流光统一转换为优雅纯净的「单色」，或保留绚丽「全彩」</div>
+                </div>
+                <div class="glass-pill-group" style="display: flex; gap: 6px;">
+                  <button class="glass-pill-btn glow-mode-btn" data-mode="mono" id="btn-glow-mono">单色纯享 (Mono)</button>
+                  <button class="glass-pill-btn glow-mode-btn active" data-mode="multi" id="btn-glow-multi">全彩流光 (Multi)</button>
+                </div>
+              </div>
+
+              <!-- 3. Dynamic Glow Orbs Count (光球数量) -->
+              <div id="row-orb-count" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">光球数量：<span id="lbl-glow-blob-count" style="color: var(--accent-primary); font-weight: 600;">4 个 (标准)</span></div>
+                <div class="glass-pill-group" style="display: flex; gap: 6px;">
+                  <button class="glass-pill-btn blob-count-btn" data-count="2">2 个 (极简)</button>
+                  <button class="glass-pill-btn blob-count-btn active" data-count="4">4 个 (标准)</button>
+                  <button class="glass-pill-btn blob-count-btn" data-count="6">6 个 (丰富)</button>
+                </div>
+              </div>
+
+              <!-- 4. Dynamic Glow Orbs Speed (流动速度与动静模式) -->
+              <div class="stable-slider-row" id="row-orb-speed" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">光球漂移速度：<span id="lbl-glow-speed" style="color: var(--accent-primary); font-weight: 600;">1.0x (流动)</span></div>
+                <input type="range" id="setting-glow-speed" min="0" max="2.5" step="0.1" value="1.0" class="glass-slider" style="flex: 1;" title="拖动到 0 可变为完全静止的环境晕光">
+              </div>
+
+              <!-- 5. Dynamic Glow Brightness / Intensity (光球亮度与扩散) -->
+              <div class="stable-slider-row" id="row-orb-intensity" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">光球光晕亮度：<span id="lbl-glow-intensity" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                <input type="range" id="setting-glow-intensity" min="0.2" max="1.6" step="0.05" value="1.0" class="glass-slider" style="flex: 1;">
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-item" id="skin-manager-entry">
+            <div class="setting-info"><div class="setting-title">自定义皮肤</div><div class="setting-desc" id="skin-preset-count">已保存 0 个</div></div>
+            <button class="glass-pill-btn" id="btn-save-custom-preset">保存当前</button>
+            <button class="glass-pill-btn" id="btn-manage-skins">管理 ›</button>
+          </div>
+          <div id="custom-preset-grid" class="custom-preset-grid" hidden></div>
+          <div class="setting-item parameter-row" id="row-visualizer-intensity" data-parameter-ready="true">
+            <div class="parameter-heading"><label for="setting-intensity">视觉灵敏度</label><span class="parameter-value" id="lbl-visualizer-intensity">1.0×</span></div>
+            <input type="range" id="setting-intensity" min="0.5" max="2.0" step="0.1" value="1.0" class="glass-slider has-progress-fill" aria-describedby="desc-visualizer-intensity">
+            <p class="setting-desc" id="desc-visualizer-intensity">调节波形和背景流光对音频振幅的响应强度</p>
+          </div>
+          <div class="setting-item library-restore-setting">
+            <div class="setting-info">
+              <div class="setting-title">重新显示移出歌曲</div>
+              <div class="setting-desc">“从音乐库移出”只隐藏歌曲，不删除本地文件。此操作清除所有隐藏记录并重新扫描正在监控的音乐目录，让目录中仍存在的歌曲重新显示；无法找回已删除的文件，原收藏、分类和自定义标签归属也不会自动恢复。</div>
+            </div>
+            <button class="glass-pill-btn" id="btn-unhide-all">恢复仍在目录中的歌曲</button>
+          </div>
+
+          <!-- 界面核心元素显示控制 (Display Elements: Cover, Title & Artist) -->
+          <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 12px;">
+            <div class="setting-info">
+              <div class="setting-title">界面核心元素显示控制 (Display Elements)</div>
+              <div class="setting-desc">按需控制唱片封面与下方歌曲元信息的显示；关闭封面后，歌名与歌手将在背景中垂直居中呈现</div>
+            </div>
+            <div class="display-toggles-box" style="display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06);">
+              <!-- 1. Album Cover Display Switch -->
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                <div style="font-size: 13px; color: var(--text-main); font-weight: 500;">显示大唱片封面 (Album Artwork)</div>
+                <button class="glass-dot-toggle-btn active" id="btn-toggle-cover" title="开启或关闭大唱片封面显示">
+                  <span class="dot-led"></span>
+                  <span class="dot-label">显示</span>
+                </button>
+              </div>
+
+              <!-- 2. Track Title & Artist Display Switch -->
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                <div style="font-size: 13px; color: var(--text-main); font-weight: 500;">显示歌曲标题与歌手 (Title & Artist)</div>
+                <button class="glass-dot-toggle-btn active" id="btn-toggle-track-meta" title="开启或关闭歌曲标题与歌手显示">
+                  <span class="dot-led"></span>
+                  <span class="dot-label">显示</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Slide-out Visualizer Mode Dedicated Drawer (Separate from System Settings) -->
+            <!-- Slide-out Visualizer Mode Dedicated Drawer (Separate from System Settings) -->
+      <aside class="glass-settings-drawer visualizer-menu-drawer" id="view-visualizer-drawer">
+        <div class="settings-drawer-header" id="vis-drawer-header">
+          <div class="settings-drawer-title" style="display: flex; align-items: center; gap: 8px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;color:var(--accent-primary);">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+            </svg>
+            <span>视觉模式设置</span>
+          </div>
+          <div class="settings-drawer-actions" style="display: flex; align-items: center; gap: 6px;">
+            <button class="glass-pill-btn" id="btn-reset-current-mode-tuning" style="padding: 3px 8px; font-size: 11px; background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.18);" title="恢复当前选中视觉模式的微调参数为默认值">重置当前</button>
+            <button class="glass-pill-btn" id="btn-reset-all-vis-tuning" style="padding: 3px 8px; font-size: 11px; background: rgba(239, 68, 68, 0.16); border-color: rgba(239, 68, 68, 0.35); color: #fca5a5;" title="恢复所有视觉模式及音频响应微调参数为出厂默认值">重置全部</button>
+            <!-- Backward compatibility for automated test runner -->
+            <button class="glass-pill-btn" id="btn-reset-vis-tuning" style="display: none !important;">重置默认</button>
+            <button class="glass-icon-btn btn-close-vis-drawer" id="btn-close-vis-drawer" title="关闭视觉模式设置">&times;</button>
+          </div>
+        </div>
+
+        <!-- Visualizer Advanced Tuning Panel -->
+        <div class="settings-content" id="settings-panel-advanced-vis">
+          <section class="vis-color-controls" aria-label="视觉配色">
+            <label class="palette-setting">视觉配色<select id="vis-palette" class="glass-select"><option value="original">原始配色</option><option value="aurora">极光 · 蓝紫粉</option><option value="ocean">深海 · 青蓝</option><option value="sunset">落日 · 金橙粉</option><option value="forest">森光 · 绿青</option><option value="solid">纯色</option></select></label>
+            <div class="vis-solid-swatches">
+              <button data-vis-solid="#38bdf8" style="--swatch:#38bdf8" aria-label="冰蓝纯色" title="冰蓝"></button>
+              <button data-vis-solid="#a78bfa" style="--swatch:#a78bfa" aria-label="紫色纯色" title="紫色"></button>
+              <button data-vis-solid="#fb7185" style="--swatch:#fb7185" aria-label="玫红纯色" title="玫红"></button>
+              <button data-vis-solid="#fbbf24" style="--swatch:#fbbf24" aria-label="金色纯色" title="金色"></button>
+              <button data-vis-solid="#34d399" style="--swatch:#34d399" aria-label="绿色纯色" title="绿色"></button>
+              <button data-vis-solid="#ffffff" style="--swatch:#ffffff" aria-label="白色纯色" title="白色"></button>
+              <label class="custom-solid-label">自定<input id="vis-solid-color" type="color" value="#38bdf8" aria-label="自定义纯色"></label>
+            </div>
+          </section>
+          <!-- Visual Quality & Quick Config Row -->
+          <div class="vis-quality-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding: 7px 12px; background: rgba(255, 255, 255, 0.04); border-radius: 9px; border: 1px solid rgba(255, 255, 255, 0.08);">
+            <div style="font-size: 13px; color: var(--text-main); font-weight: 500; display: flex; align-items: center; gap: 6px;">
+              <span>视觉质量：</span>
+            </div>
+            <select id="vis-quality-select" class="glass-select" style="padding: 4px 10px; font-size: 12px; background: rgba(255, 255, 255, 0.08); color: var(--text-main); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px; cursor: pointer; outline: none;">
+              <option value="low">低</option>
+              <option value="balanced" selected>均衡</option>
+              <option value="high">高</option>
+              <option value="ultra">极高</option>
+            </select>
+          </div>
+
+          <!-- Target FPS & Live FPS Row -->
+          <div class="vis-fps-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding: 7px 12px; background: rgba(255, 255, 255, 0.04); border-radius: 9px; border: 1px solid rgba(255, 255, 255, 0.08);">
+            <div style="font-size: 13px; color: var(--text-main); font-weight: 500; display: flex; align-items: center; gap: 8px;">
+              <span>目标渲染帧率：</span>
+              <span id="vis-live-fps-badge" style="font-size: 11px; padding: 2px 7px; border-radius: 5px; background: rgba(56, 189, 248, 0.2); color: var(--accent-primary); font-weight: 700; border: 1px solid rgba(56, 189, 248, 0.35);">60 FPS</span>
+            </div>
+            <select id="vis-target-fps-select" class="glass-select" style="padding: 4px 10px; font-size: 12px; background: rgba(255, 255, 255, 0.08); color: var(--text-main); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px; cursor: pointer; outline: none;">
+              <option value="60">60 FPS (节能基准)</option>
+
+
+
+              <option value="unlimited" selected>稳定流畅 / 最高 60 FPS</option>
+            </select>
+          </div>
+
+          <!-- 6 Supported Modes Tabs + Audio Response Tab -->
+          <div class="vis-tuning-tabs-bar" id="vis-tuning-tabs-bar">
+            <button class="vis-tune-tab active" data-tune-mode="wave">波形</button>
+            <button class="vis-tune-tab" data-tune-mode="spectrum">环形</button>
+            <button class="vis-tune-tab" data-tune-mode="sphere">球形</button>
+            <button class="vis-tune-tab" data-tune-mode="bars">柱谱</button>
+            <button class="vis-tune-tab" data-tune-mode="orb">粒子</button>
+            <button class="vis-tune-tab" data-tune-mode="ambient">流光</button>
+            <button class="vis-tune-tab" data-tune-mode="reactive">律动线</button>
+<button class="vis-tune-tab" data-tune-mode="curtain">光幕</button>
+<button class="vis-tune-tab" data-tune-mode="audio">音频响应</button>
+          </div>
+          <div class="vis-tuning-notice">
+            <span>💡 点击上方标签可切换微调目标并联动播放舞台实时预览；各模式均已支持超宽屏空间透视与精细调节。</span>
+          </div>
+
+          <!-- Section 1: 波形 (Wave) -->
+<div class="vis-tune-section" id="vis-tune-sec-wave"><div class="setting-item" style="flex-direction:column;align-items:stretch;gap:12px"><div class="setting-info"><div class="setting-title">波形</div><div class="setting-desc">荧光三线共用音频波形，仅以幅度、轻微跟随延迟和明暗表现层次。平行样式保留独立参数。</div></div><div class="custom-bg-sliders-box"><label class="reactive-layout-label">曲线样式<select id="vis-wave-style" class="glass-select"><option value="ribbon">荧光三线 · 同步起伏</option><option value="parallel">平行曲线</option></select></label><div class="stable-slider-row custom-bg-slider-row" data-curve-style="all"><div>波动幅度<span id="lbl-vis-tune-wave-amplitude"></span></div><input class="glass-slider" aria-label="波动幅度" type="range" id="vis-tune-wave-amplitude" min="0" max="6" step="0.05"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>响应速度<span id="lbl-vis-wave-response"></span></div><input class="glass-slider" aria-label="响应速度" type="range" id="vis-wave-response" min="0" max="1" step="0.05"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>平滑度<span id="lbl-vis-wave-curveSmooth"></span></div><input class="glass-slider" aria-label="平滑度" title="平滑细碎波纹；越高曲线越柔和" type="range" id="vis-wave-curveSmooth" min="0" max="1" step="0.05" value="0.2"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>边缘稳定<span id="lbl-vis-wave-edgeStability"></span></div><input class="glass-slider" aria-label="边缘稳定" title="只减弱两侧的音频抖动，不影响中间响应和基础流动" type="range" id="vis-wave-edgeStability" min="0" max="1" step="0.05" value="0.85"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>采样跨度<span id="lbl-vis-wave-density"></span></div><input class="glass-slider" aria-label="采样跨度" type="range" id="vis-wave-density" min="0.5" max="12" step="0.25"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>振动分离度<span id="lbl-vis-wave-separation"></span></div><input class="glass-slider" aria-label="振动分离度" type="range" id="vis-wave-separation" min="0" max="2" step="0.05"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>流动分离度<span id="lbl-vis-wave-flowSeparation"></span></div><input class="glass-slider" aria-label="流动分离度" type="range" id="vis-wave-flowSeparation" min="0" max="2" step="0.05"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>流动速度<span id="lbl-vis-wave-driftSpeed"></span></div><input class="glass-slider" aria-label="流动速度" type="range" id="vis-wave-driftSpeed" min="0" max="4" step="0.05"></div><label class="reactive-layout-label" data-curve-style="ribbon">流动方向<select id="vis-wave-driftDirection" class="glass-select"><option value="right">从左向右</option><option value="left">从右向左</option><option value="still">原位起伏</option></select></label><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>流动幅度<span id="lbl-vis-wave-idleMotion"></span></div><input class="glass-slider" aria-label="流动幅度" type="range" id="vis-wave-idleMotion" min="0" max="2" step="0.05"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="parallel"><div>曲线间距<span id="lbl-vis-tune-wave-depth-len"></span></div><input class="glass-slider" type="range" id="vis-tune-wave-depth-len" min="0.5" max="4" step="0.05"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="all"><div>线条粗细<span id="lbl-vis-tune-wave-line-width"></span></div><input class="glass-slider" aria-label="线条粗细" type="range" id="vis-tune-wave-line-width" min="1" max="12" step="0.1"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="all"><div>荧光强度<span id="lbl-vis-tune-wave-glow"></span></div><input class="glass-slider" aria-label="荧光强度" type="range" id="vis-tune-wave-glow" min="0" max="75" step="1"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="parallel"><div>曲线数量<span id="lbl-vis-tune-wave-line-count"></span></div><input class="glass-slider" aria-label="曲线数量" type="range" id="vis-tune-wave-line-count" min="3" max="5" step="1"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="parallel"><div>平滑度<span id="lbl-vis-tune-wave-smoothing"></span></div><input class="glass-slider" aria-label="平滑度" type="range" id="vis-tune-wave-smoothing" min="0" max="1" step="0.05"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="parallel"><div>流动速度<span id="lbl-vis-tune-wave-flow-speed"></span></div><input class="glass-slider" aria-label="流动速度" type="range" id="vis-tune-wave-flow-speed" min="0" max="2" step="0.05"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="parallel"><div>伴线亮度<span id="lbl-vis-tune-wave-companion"></span></div><input class="glass-slider" aria-label="伴线亮度" type="range" id="vis-tune-wave-companion" min="0" max="1" step="0.05"></div></div></div></div><div class="vis-tune-section" id="vis-tune-sec-reactive" style="display:none"><div class="setting-item" style="flex-direction:column;align-items:stretch;gap:12px"><div class="setting-info"><div class="setting-title">律动线</div><div class="setting-desc">三线同步起伏，保持接近的峰谷走势；也可选择原来的分频线或全频单线。</div></div><div class="custom-bg-sliders-box"><label class="reactive-layout-label">曲线样式<select id="vis-reactive-layout" class="glass-select"><option value="ribbon">荧光三线 · 同步起伏</option><option value="bands">三频线</option><option value="single">单条 · 全频波形</option></select></label><div class="stable-slider-row custom-bg-slider-row" data-curve-style="all"><div>波动幅度<span id="lbl-vis-reactive-strength"></span></div><input class="glass-slider" aria-label="波动幅度" type="range" id="vis-reactive-strength" min="0" max="6" step="0.05"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>响应速度<span id="lbl-vis-reactive-response"></span></div><input class="glass-slider" aria-label="响应速度" type="range" id="vis-reactive-response" min="0" max="1" step="0.05"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>平滑度<span id="lbl-vis-reactive-curveSmooth"></span></div><input class="glass-slider" aria-label="平滑度" title="平滑细碎波纹；越高曲线越柔和" type="range" id="vis-reactive-curveSmooth" min="0" max="1" step="0.05" value="0.2"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>边缘稳定<span id="lbl-vis-reactive-edgeStability"></span></div><input class="glass-slider" aria-label="边缘稳定" title="只减弱两侧的音频抖动，不影响中间响应和基础流动" type="range" id="vis-reactive-edgeStability" min="0" max="1" step="0.05" value="0.85"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>采样跨度<span id="lbl-vis-reactive-density"></span></div><input class="glass-slider" aria-label="采样跨度" type="range" id="vis-reactive-density" min="0.5" max="12" step="0.25"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>振动分离度<span id="lbl-vis-reactive-separation"></span></div><input class="glass-slider" aria-label="振动分离度" type="range" id="vis-reactive-separation" min="0" max="2" step="0.05"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>流动分离度<span id="lbl-vis-reactive-flowSeparation"></span></div><input class="glass-slider" aria-label="流动分离度" type="range" id="vis-reactive-flowSeparation" min="0" max="2" step="0.05"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>流动速度<span id="lbl-vis-reactive-driftSpeed"></span></div><input class="glass-slider" aria-label="流动速度" type="range" id="vis-reactive-driftSpeed" min="0" max="4" step="0.05"></div><label class="reactive-layout-label" data-curve-style="ribbon">流动方向<select id="vis-reactive-driftDirection" class="glass-select"><option value="right">从左向右</option><option value="left">从右向左</option><option value="still">原位起伏</option></select></label><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>流动幅度<span id="lbl-vis-reactive-idleMotion"></span></div><input class="glass-slider" aria-label="流动幅度" type="range" id="vis-reactive-idleMotion" min="0" max="2" step="0.05"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="all"><div>线条粗细<span id="lbl-vis-reactive-lineWidth"></span></div><input class="glass-slider" aria-label="线条粗细" type="range" id="vis-reactive-lineWidth" min="1" max="12" step="0.1"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="ribbon"><div>荧光强度<span id="lbl-vis-reactive-glow"></span></div><input class="glass-slider" aria-label="荧光强度" type="range" id="vis-reactive-glow" min="0" max="3" step="0.05"></div><div class="stable-slider-row custom-bg-slider-row" data-curve-style="legacy"><div>平滑度<span id="lbl-vis-reactive-smoothing"></span></div><input class="glass-slider" aria-label="平滑度" type="range" id="vis-reactive-smoothing" min="0" max="1" step="0.05"></div></div></div></div><div class="vis-tune-section" id="vis-tune-sec-curtain" style="display:none"><div class="setting-item" style="flex-direction:column;align-items:stretch;gap:12px"><div class="setting-info"><div class="setting-title">节奏光幕</div><div class="setting-desc">宽幅柔光随三频能量呼吸，重拍时快速增强、随后柔和回落。</div></div><div class="custom-bg-sliders-box"><div class="stable-slider-row custom-bg-slider-row"><div>节拍强度<span id="lbl-vis-curtain-strength">1.5</span></div><input class="glass-slider" aria-label="节拍强度" type="range" id="vis-curtain-strength" min="0.5" max="3" step="0.1" value="1.5"></div>
+<div class="stable-slider-row custom-bg-slider-row"><div>光幕宽度<span id="lbl-vis-curtain-width">0.32</span></div><input class="glass-slider" aria-label="光幕宽度" type="range" id="vis-curtain-width" min="0.15" max="0.6" step="0.01" value="0.32"></div>
+<div class="stable-slider-row custom-bg-slider-row"><div>漂移速度<span id="lbl-vis-curtain-speed">1</span></div><input class="glass-slider" aria-label="漂移速度" type="range" id="vis-curtain-speed" min="0" max="2" step="0.05" value="1"></div></div></div></div>
+          <!-- Section 2: 环形 (Spectrum / Circle) -->
+          <div class="vis-tune-section" id="vis-tune-sec-spectrum" style="display: none;">
+            <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 12px;">
+              <div class="setting-info">
+                <div class="setting-title">环形频谱参数微调 (Circular Spectrum Parameters)</div>
+                <div class="setting-desc">微调围绕唱片中心发散的霓虹光芒半径、光柱长度、旋转与对称渐细</div>
+              </div>
+              <div class="custom-bg-sliders-box">
+                <div class="vis-category-header">基础参数</div>
+                <!-- Inner Radius Ratio -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">环形内径基准比例：<span id="lbl-vis-tune-spec-inner-radius" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-spec-inner-radius" min="0.5" max="1.8" step="0.05" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Bar Length Ratio -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">频段光柱长度倍率：<span id="lbl-vis-tune-spec-bar-len" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-spec-bar-len" min="0.5" max="2.0" step="0.05" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Bar Width -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">光柱线条粗细：<span id="lbl-vis-tune-spec-bar-width" style="color: var(--accent-primary); font-weight: 600;">2.4px</span></div>
+                  <input type="range" id="vis-tune-spec-bar-width" min="1.0" max="5.0" step="0.2" value="2.4" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Bar Count -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">环形频柱数量：<span id="lbl-vis-tune-spec-bar-count" style="color: var(--accent-primary); font-weight: 600;">64 柱</span></div>
+                  <input type="range" id="vis-tune-spec-bar-count" min="32" max="128" step="16" value="64" class="glass-slider" style="flex: 1;">
+                </div>
+
+                <div class="vis-category-header">空间与对称</div>
+                <!-- Spectrum Rotation -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">频谱旋转：<span id="lbl-vis-tune-spec-rot" style="color: var(--accent-primary); font-weight: 600;">0°</span></div>
+                  <input type="range" id="vis-tune-spec-rot" min="0" max="360" step="5" value="0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Spectrum Symmetry Select -->
+                <div class="custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">频谱对称：</div>
+                  <select id="vis-tune-spec-symmetry" class="glass-select" style="padding: 4px 10px; font-size: 12px; background: rgba(255, 255, 255, 0.08); color: var(--text-main); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px;">
+                    <option value="none" selected>关闭</option>
+                    <option value="2x">2重</option>
+                    <option value="4x">4重</option>
+                    <option value="8x">8重</option>
+                  </select>
+                </div>
+                <!-- Spectrum Smoothing -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">频谱平滑：<span id="lbl-vis-tune-spec-smooth" style="color: var(--accent-primary); font-weight: 600;">60%</span></div>
+                  <input type="range" id="vis-tune-spec-smooth" min="0" max="1.0" step="0.05" value="0.60" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Radial Compression -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">径向压缩：<span id="lbl-vis-tune-spec-compression" style="color: var(--accent-primary); font-weight: 600;">35%</span></div>
+                  <input type="range" id="vis-tune-spec-compression" min="0" max="1.0" step="0.05" value="0.35" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Bar Taper -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">光柱渐细：<span id="lbl-vis-tune-spec-taper" style="color: var(--accent-primary); font-weight: 600;">20%</span></div>
+                  <input type="range" id="vis-tune-spec-taper" min="0" max="1.0" step="0.05" value="0.20" class="glass-slider" style="flex: 1;">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: 球形 (Sphere / 3D Pulse Spectrum) -->
+          <div class="vis-tune-section" id="vis-tune-sec-sphere" style="display: none;">
+            <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 12px;">
+              <div class="setting-info">
+                <div class="setting-title">3D球形频谱参数微调 (3D Sphere Parameters)</div>
+                <div class="setting-desc">多重频谱对称与低频扩散：均衡饱满、空间自转与通透等离子球核</div>
+              </div>
+              <div class="custom-bg-sliders-box">
+                <div class="vis-category-header">光点音频律动</div><label class="reactive-layout-label">光点模式<select id="vis-sphere-lightMode" class="glass-select"><option value="beat">节拍闪烁（明显亮灭）</option><option value="energy">音量跟随</option><option value="steady">常亮</option></select></label><div class="stable-slider-row custom-bg-slider-row"><div>光点灵敏度<span id="lbl-vis-sphere-lightSensitivity"></span></div><input class="glass-slider" aria-label="光点灵敏度" type="range" id="vis-sphere-lightSensitivity" min="0.5" max="8" step="0.1" value="3"></div><div class="stable-slider-row custom-bg-slider-row"><div>熄灭时间（毫秒）<span id="lbl-vis-sphere-lightDecay"></span></div><input class="glass-slider" aria-label="熄灭时间（毫秒）" type="range" id="vis-sphere-lightDecay" min="30" max="600" step="10" value="120"></div><div class="stable-slider-row custom-bg-slider-row"><div>最低亮度<span id="lbl-vis-sphere-idleLight"></span></div><input class="glass-slider" aria-label="最低亮度" type="range" id="vis-sphere-idleLight" min="0" max="0.5" step="0.01" value="0.04"></div><div class="vis-category-header">基础参数</div>
+                <!-- Sphere Radius Ratio -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">3D球体半径比例：<span id="lbl-vis-tune-sphere-radius" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-sphere-radius" min="0.5" max="1.8" step="0.05" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Rotation Speed -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">三维自转速度倍率：<span id="lbl-vis-tune-sphere-rot-speed" style="color: var(--accent-primary); font-weight: 600;">1.0x</span></div>
+                  <input type="range" id="vis-tune-sphere-rot-speed" min="0.0" max="3.0" step="0.1" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Core Glow -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">球心等离子光晕：<span id="lbl-vis-tune-sphere-core-glow" style="color: var(--accent-primary); font-weight: 600;">70%</span></div>
+                  <input type="range" id="vis-tune-sphere-core-glow" min="0" max="1.0" step="0.05" value="0.7" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Node Size -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">表面星芒节点大小：<span id="lbl-vis-tune-sphere-node-size" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-sphere-node-size" min="0.5" max="2.0" step="0.05" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+
+                <div class="vis-category-header">对称与空间深度</div>
+                <!-- Sphere Symmetry Select -->
+                <div class="custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">频谱布局：</div>
+                  <select id="vis-tune-sphere-symmetry" class="glass-select" style="padding: 4px 10px; font-size: 12px; background: rgba(255, 255, 255, 0.08); color: var(--text-main); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px;">
+                    <option value="1x">单向</option>
+                    <option value="2x" selected>2重对称</option>
+                    <option value="4x">4重对称</option>
+                    <option value="8x">8重对称</option>
+                  </select>
+                </div>
+                <!-- Sphere Rotation Angle -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">频谱旋转：<span id="lbl-vis-tune-sphere-rot" style="color: var(--accent-primary); font-weight: 600;">0°</span></div>
+                  <input type="range" id="vis-tune-sphere-rot" min="0" max="360" step="5" value="0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Bass Diffusion -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">低频扩散：<span id="lbl-vis-tune-sphere-bass-diff" style="color: var(--accent-primary); font-weight: 600;">35%</span></div>
+                  <input type="range" id="vis-tune-sphere-bass-diff" min="0" max="1.0" step="0.05" value="0.35" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Sphere Smoothing -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">球面平滑：<span id="lbl-vis-tune-sphere-smooth" style="color: var(--accent-primary); font-weight: 600;">60%</span></div>
+                  <input type="range" id="vis-tune-sphere-smooth" min="0" max="1.0" step="0.05" value="0.60" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Back Alpha -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">背面透明度：<span id="lbl-vis-tune-sphere-back-alpha" style="color: var(--accent-primary); font-weight: 600;">45%</span></div>
+                  <input type="range" id="vis-tune-sphere-back-alpha" min="0" max="1.0" step="0.05" value="0.45" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Spatial Depth -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">空间纵深：<span id="lbl-vis-tune-sphere-depth" style="color: var(--accent-primary); font-weight: 600;">60%</span></div>
+                  <input type="range" id="vis-tune-sphere-depth" min="0" max="1.0" step="0.05" value="0.60" class="glass-slider" style="flex: 1;">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 4: 柱谱 (Bars / Horizontal Spectrum) -->
+          <div class="vis-tune-section" id="vis-tune-sec-bars" style="display: none;">
+            <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 12px;">
+              <div class="setting-info">
+                <div class="setting-title">横向柱谱参数微调 (Horizontal Bars Parameters)</div>
+                <div class="setting-desc">微调贯穿全屏的柱体宽度占比、柱体最高幅度、毛玻璃水中倒影反射与悬停峰值点</div>
+              </div>
+              <div class="custom-bg-sliders-box">
+                <div class="vis-category-header">基础参数</div>
+                <!-- Bar Width Ratio -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">柱条宽度占比：<span id="lbl-vis-tune-bars-width" style="color: var(--accent-primary); font-weight: 600;">65%</span></div>
+                  <input type="range" id="vis-tune-bars-width" min="0.30" max="0.90" step="0.05" value="0.65" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Height Ratio -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">柱谱最大高度倍率：<span id="lbl-vis-tune-bars-height" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-bars-height" min="0.5" max="2.0" step="0.05" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Reflection Alpha -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">水中漫反射倒影强度：<span id="lbl-vis-tune-bars-reflection" style="color: var(--accent-primary); font-weight: 600;">25%</span></div>
+                  <input type="range" id="vis-tune-bars-reflection" min="0" max="0.60" step="0.05" value="0.25" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Peak Hold Cap Dot Switch -->
+                <div class="custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">浮动悬停峰值点：<span id="lbl-vis-tune-bars-peak-hold" style="color: var(--accent-primary); font-weight: 600;">开启</span></div>
+                  <label class="switch switch-mini" title="开启或关闭柱谱顶部悬停峰值白点">
+                    <input type="checkbox" id="vis-tune-bars-peak-hold" checked>
+                    <span class="slider"></span>
+                  </label>
+                </div>
+
+                <div class="vis-category-header">排列与形态</div>
+                <!-- Frequency Arrangement Select -->
+                <div class="custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">频率排列：</div>
+                  <select id="vis-tune-bars-freq-order" class="glass-select" style="padding: 4px 10px; font-size: 12px; background: rgba(255, 255, 255, 0.08); color: var(--text-main); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px;">
+                    <option value="asc" selected>低频到高频</option>
+                    <option value="desc">高频到低频</option>
+                    <option value="center_bass">低频居中</option>
+                    <option value="center_treble">高频居中</option>
+                    <option value="mirror">左右镜像</option>
+                  </select>
+                </div>
+                <!-- Bar Count -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">柱条数量：<span id="lbl-vis-tune-bars-count" style="color: var(--accent-primary); font-weight: 600;">64 柱</span></div>
+                  <input type="range" id="vis-tune-bars-count" min="16" max="256" step="8" value="64" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Bar Gap -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">柱条间距：<span id="lbl-vis-tune-bars-gap" style="color: var(--accent-primary); font-weight: 600;">35%</span></div>
+                  <input type="range" id="vis-tune-bars-gap" min="0" max="0.80" step="0.05" value="0.35" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Corner Radius -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">圆角程度：<span id="lbl-vis-tune-bars-corner" style="color: var(--accent-primary); font-weight: 600;">50%</span></div>
+                  <input type="range" id="vis-tune-bars-corner" min="0" max="1.0" step="0.05" value="0.50" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Peak Hold Ms -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">峰值停留时间：<span id="lbl-vis-tune-bars-peak-hold-ms" style="color: var(--accent-primary); font-weight: 600;">300ms</span></div>
+                  <input type="range" id="vis-tune-bars-peak-hold-ms" min="0" max="1000" step="50" value="300" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Peak Decay Speed -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">峰值下降速度：<span id="lbl-vis-tune-bars-peak-decay" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-bars-peak-decay" min="0" max="2.0" step="0.1" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Reflection Softness -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">倒影柔化：<span id="lbl-vis-tune-bars-ref-soft" style="color: var(--accent-primary); font-weight: 600;">40%</span></div>
+                  <input type="range" id="vis-tune-bars-ref-soft" min="0" max="1.0" step="0.05" value="0.40" class="glass-slider" style="flex: 1;">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 5: 粒子 (Orb / Particle) -->
+          <div class="vis-tune-section" id="vis-tune-sec-orb" style="display: none;">
+            <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 12px;">
+              <div class="setting-info">
+                <div class="setting-title">粒子场参数微调 (Particle Field Parameters)</div>
+                <div class="setting-desc">透视空间粒子场：从地平线纵深奔涌向镜头、近大远小与轻量景深虚化</div>
+              </div>
+              <div class="custom-bg-sliders-box">
+                <div class="vis-category-header">基础</div>
+                <!-- Particle Count -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">粒子数量：<span id="lbl-vis-tune-orb-count" style="color: var(--accent-primary); font-weight: 600;">120</span></div>
+                  <input type="range" id="vis-tune-orb-count" min="20" max="300" step="10" value="120" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Particle Size -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">粒子尺寸：<span id="lbl-vis-tune-orb-size" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-orb-size" min="0.2" max="3.0" step="0.1" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+
+                <div class="vis-category-header">空间</div>
+                <!-- Spatial Depth -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">空间纵深：<span id="lbl-vis-tune-orb-depth" style="color: var(--accent-primary); font-weight: 600;">70%</span></div>
+                  <input type="range" id="vis-tune-orb-depth" min="0.1" max="1.0" step="0.05" value="0.70" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Horizon Ratio -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">粒子地平线：<span id="lbl-vis-tune-orb-horizon" style="color: var(--accent-primary); font-weight: 600;">42%</span></div>
+                  <input type="range" id="vis-tune-orb-horizon" min="0.20" max="0.70" step="0.02" value="0.42" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Perspective Spread -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">透视扩散：<span id="lbl-vis-tune-orb-spread" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-orb-spread" min="0" max="2.0" step="0.05" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- View Direction -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">观察方向：<span id="lbl-vis-tune-orb-direction" style="color: var(--accent-primary); font-weight: 600;">0°</span></div>
+                  <input type="range" id="vis-tune-orb-direction" min="-45" max="45" step="1" value="0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Field Rotation -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">粒子场旋转：<span id="lbl-vis-tune-orb-rot" style="color: var(--accent-primary); font-weight: 600;">0°</span></div>
+                  <input type="range" id="vis-tune-orb-rot" min="0" max="360" step="5" value="0" class="glass-slider" style="flex: 1;">
+                </div>
+
+                <div class="vis-category-header">动态</div>
+                <!-- Particle Speed -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">粒子速度：<span id="lbl-vis-tune-orb-speed" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-orb-speed" min="0" max="2.0" step="0.05" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Turbulence -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">扰动强度：<span id="lbl-vis-tune-orb-turb" style="color: var(--accent-primary); font-weight: 600;">20%</span></div>
+                  <input type="range" id="vis-tune-orb-turb" min="0" max="1.0" step="0.05" value="0.20" class="glass-slider" style="flex: 1;">
+                </div>
+
+                <div class="vis-category-header">音频</div>
+                <!-- Music Influence -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">音乐影响：<span id="lbl-vis-tune-orb-music-inf" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-orb-music-inf" min="0" max="2.0" step="0.05" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Bass Thrust -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">低频推进：<span id="lbl-vis-tune-orb-bass-thrust" style="color: var(--accent-primary); font-weight: 600;">80%</span></div>
+                  <input type="range" id="vis-tune-orb-bass-thrust" min="0" max="2.0" step="0.05" value="0.80" class="glass-slider" style="flex: 1;">
+                </div>
+
+                <div class="vis-category-header">光效</div>
+                <!-- Foreground Blur -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">前景虚化：<span id="lbl-vis-tune-orb-fg-blur" style="color: var(--accent-primary); font-weight: 600;">30%</span></div>
+                  <input type="range" id="vis-tune-orb-fg-blur" min="0" max="1.0" step="0.05" value="0.30" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Far Alpha -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">远景透明度：<span id="lbl-vis-tune-orb-far-alpha" style="color: var(--accent-primary); font-weight: 600;">45%</span></div>
+                  <input type="range" id="vis-tune-orb-far-alpha" min="0" max="1.0" step="0.05" value="0.45" class="glass-slider" style="flex: 1;">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 6: 流光 (Ambient / Flow) -->
+          <div class="vis-tune-section" id="vis-tune-sec-ambient" style="display: none;">
+            <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 12px;">
+              <div class="setting-info">
+                <div class="setting-title">流光流场参数微调 (Flow Field Parameters)</div>
+                <div class="setting-desc">极简音频响应流场：平滑连续向量流线、优雅曲率惯性；装饰光球默认彻底关闭</div>
+              </div>
+              <div class="custom-bg-sliders-box">
+                <div class="vis-category-header">基础</div>
+                <!-- Ribbon Count -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">流光数量：<span id="lbl-vis-tune-ambient-count" style="color: var(--accent-primary); font-weight: 600;">32 条</span></div>
+                  <input type="range" id="vis-tune-ambient-count" min="4" max="128" step="4" value="32" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Ribbon Width -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">流光宽度：<span id="lbl-vis-tune-ambient-width" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-ambient-width" min="0.2" max="3.0" step="0.1" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Trail Length -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">拖尾长度：<span id="lbl-vis-tune-ambient-trail" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-ambient-trail" min="0.1" max="3.0" step="0.1" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+
+                <div class="vis-category-header">动态</div>
+                <!-- Flow Speed -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">流动速度：<span id="lbl-vis-tune-ambient-speed" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-ambient-speed" min="0" max="2.0" step="0.05" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Curvature -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">弯曲程度：<span id="lbl-vis-tune-ambient-curve" style="color: var(--accent-primary); font-weight: 600;">50%</span></div>
+                  <input type="range" id="vis-tune-ambient-curve" min="0" max="1.0" step="0.05" value="0.50" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Turbulence -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">扰动强度：<span id="lbl-vis-tune-ambient-turb" style="color: var(--accent-primary); font-weight: 600;">25%</span></div>
+                  <input type="range" id="vis-tune-ambient-turb" min="0" max="1.0" step="0.05" value="0.25" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Flow Direction Angle -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">整体方向：<span id="lbl-vis-tune-ambient-dir" style="color: var(--accent-primary); font-weight: 600;">15°</span></div>
+                  <input type="range" id="vis-tune-ambient-dir" min="0" max="360" step="5" value="15" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Spread Angle -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">方向散布：<span id="lbl-vis-tune-ambient-spread" style="color: var(--accent-primary); font-weight: 600;">35°</span></div>
+                  <input type="range" id="vis-tune-ambient-spread" min="0" max="180" step="5" value="35" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Inertia -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">流动惯性：<span id="lbl-vis-tune-ambient-inertia" style="color: var(--accent-primary); font-weight: 600;">65%</span></div>
+                  <input type="range" id="vis-tune-ambient-inertia" min="0" max="1.0" step="0.05" value="0.65" class="glass-slider" style="flex: 1;">
+                </div>
+
+                <div class="vis-category-header">空间</div>
+                <!-- Spatial Depth -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">空间纵深：<span id="lbl-vis-tune-ambient-depth" style="color: var(--accent-primary); font-weight: 600;">50%</span></div>
+                  <input type="range" id="vis-tune-ambient-depth" min="0" max="1.0" step="0.05" value="0.50" class="glass-slider" style="flex: 1;">
+                </div>
+
+                <div class="vis-category-header">音频</div>
+                <!-- Music Influence -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">音乐影响：<span id="lbl-vis-tune-ambient-music-inf" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-ambient-music-inf" min="0" max="2.0" step="0.05" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+
+                <div class="vis-category-header">光效</div>
+                <!-- Glow Intensity -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">外发光强度：<span id="lbl-vis-tune-ambient-glow" style="color: var(--accent-primary); font-weight: 600;">80%</span></div>
+                  <input type="range" id="vis-tune-ambient-glow" min="0" max="2.0" step="0.05" value="0.80" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Fade Speed -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">消散速度：<span id="lbl-vis-tune-ambient-fade" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-ambient-fade" min="0" max="2.0" step="0.05" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Luminous Orbs Toggle Switch (DEFAULT: OFF) -->
+                <div class="custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">光球：<span id="lbl-vis-tune-ambient-orbs" style="color: var(--accent-primary); font-weight: 600;">关闭</span></div>
+                  <label class="switch switch-mini" title="开启或关闭流光模式背景装饰发光微粒（默认彻底关闭）">
+                    <input type="checkbox" id="vis-tune-ambient-orbs">
+                    <span class="slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 7: 音频响应 (Audio Response) -->
+          <div class="vis-tune-section" id="vis-tune-sec-audio" style="display: none;">
+            <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 12px;">
+              <div class="setting-info">
+                <div class="setting-title">视觉统一音频响应 (Visual Audio Preprocessing)</div>
+                <div class="setting-desc">内部频谱预处理层（只影响画面映射，不改变实际音频输出）：Attack/Release阻尼响应、频段增益与峰值柔化</div>
+              </div>
+              <div class="custom-bg-sliders-box">
+                <div class="vis-category-header">动态响应</div>
+                <!-- Smooth Factor -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">频谱平滑度：<span id="lbl-vis-tune-audio-smooth" style="color: var(--accent-primary); font-weight: 600;">70%</span></div>
+                  <input type="range" id="vis-tune-audio-smooth" min="0" max="0.95" step="0.05" value="0.70" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Attack -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">上升响应：<span id="lbl-vis-tune-audio-attack" style="color: var(--accent-primary); font-weight: 600;">35ms</span></div>
+                  <input type="range" id="vis-tune-audio-attack" min="0" max="300" step="5" value="35" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Release -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">下降响应：<span id="lbl-vis-tune-audio-release" style="color: var(--accent-primary); font-weight: 600;">300ms</span></div>
+                  <input type="range" id="vis-tune-audio-release" min="50" max="1200" step="25" value="300" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Compression -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">频谱压缩：<span id="lbl-vis-tune-audio-comp" style="color: var(--accent-primary); font-weight: 600;">45%</span></div>
+                  <input type="range" id="vis-tune-audio-comp" min="0" max="1.0" step="0.05" value="0.45" class="glass-slider" style="flex: 1;">
+                </div>
+
+                <div class="vis-category-header">频段映射</div>
+                <!-- Bass Scale -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">低频响应：<span id="lbl-vis-tune-audio-bass" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-audio-bass" min="0" max="2.0" step="0.05" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- Mid Scale -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">中频响应：<span id="lbl-vis-tune-audio-mid" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-audio-mid" min="0" max="2.0" step="0.05" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+                <!-- High Scale -->
+                <div class="stable-slider-row custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">高频响应：<span id="lbl-vis-tune-audio-high" style="color: var(--accent-primary); font-weight: 600;">100%</span></div>
+                  <input type="range" id="vis-tune-audio-high" min="0" max="2.0" step="0.05" value="1.0" class="glass-slider" style="flex: 1;">
+                </div>
+
+                <div class="vis-category-header">分布与柔化</div>
+                <!-- Distribution Select -->
+                <div class="custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">频率分布：</div>
+                  <select id="vis-tune-audio-dist" class="glass-select" style="padding: 4px 10px; font-size: 12px; background: rgba(255, 255, 255, 0.08); color: var(--text-main); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px;">
+                    <option value="log" selected>对数</option>
+                    <option value="linear">线性</option>
+                  </select>
+                </div>
+                <!-- Peak Softening Select -->
+                <div class="custom-bg-slider-row" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                  <div style="font-size: 13px; color: var(--text-main); min-width: 140px;">峰值柔化：</div>
+                  <select id="vis-tune-audio-soft" class="glass-select" style="padding: 4px 10px; font-size: 12px; background: rgba(255, 255, 255, 0.08); color: var(--text-main); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px;">
+                    <option value="off">关闭</option>
+                    <option value="soft" selected>柔和</option>
+                    <option value="medium">中等</option>
+                    <option value="heavy">明显</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Bottom Glass Control Deck -->
+    <footer class="glass-player-bar">
+      <!-- Left: Mini info -->
+      <div class="bar-left">
+        <div class="mini-cover" id="mini-cover">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+          </svg>
+        </div>
+        <div class="mini-meta">
+          <div class="mini-title" id="mini-title">未在播放</div>
+          <div class="mini-artist" id="mini-artist">双击歌曲或添加目录</div>
+        </div>
+      </div>
+
+      <!-- Center: Transport & Timeline -->
+      <div class="bar-center">
+        <div class="playback-controls">
+          <button class="ctrl-btn" id="btn-shuffle" title="随机播放">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="16 3 21 3 21 8"></polyline>
+              <line x1="4" y1="20" x2="21" y2="3"></line>
+              <polyline points="21 16 21 21 16 21"></polyline>
+              <line x1="15" y1="15" x2="21" y2="21"></line>
+              <line x1="4" y1="4" x2="9" y2="9"></line>
+            </svg>
+          </button>
+          <button class="ctrl-btn" id="btn-prev" title="上一首 (Ctrl+Left)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="19 20 9 12 19 4 19 20"></polygon>
+              <line x1="5" y1="19" x2="5" y2="5"></line>
+            </svg>
+          </button>
+          <button class="ctrl-btn btn-play-pause" id="btn-play-pause" title="播放 / 暂停 (Space)">
+            <svg id="icon-play" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="6 4 20 12 6 20 6 4"></polygon>
+            </svg>
+            <svg id="icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none;">
+              <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+              <rect x="14" y="4" width="4" height="16" rx="1"></rect>
+            </svg>
+          </button>
+          <button class="ctrl-btn" id="btn-next" title="下一首 (Ctrl+Right)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 4 15 12 5 20 5 4"></polygon>
+              <line x1="19" y1="5" x2="19" y2="19"></line>
+            </svg>
+          </button>
+          <button class="ctrl-btn mode-all active" id="btn-repeat" title="循环模式: 全部循环 (列表循环)">
+            <svg class="icon-repeat-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="17 1 21 5 17 9"></polyline>
+              <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+              <polyline points="7 23 3 19 7 15"></polyline>
+              <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+              <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" stroke-width="2.2"></line>
+            </svg>
+            <svg class="icon-repeat-all" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="17 1 21 5 17 9"></polyline>
+              <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+              <polyline points="7 23 3 19 7 15"></polyline>
+              <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+            </svg>
+            <svg class="icon-repeat-one" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="17 1 21 5 17 9"></polyline>
+              <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+              <polyline points="7 23 3 19 7 15"></polyline>
+              <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+              <path d="M11 10.5l1.5-1.5v5.5" stroke-width="2.2"></path>
+              <path d="M10 14.5h4" stroke-width="2"></path>
+            </svg>
+          </button>
+        </div>
+
+        <div class="timeline-wrap">
+          <span class="time-label" id="current-time">0:00</span>
+          <div class="timeline-track" id="timeline-track">
+            <div class="timeline-progress" id="timeline-progress"></div>
+            <div class="timeline-handle" id="timeline-handle"></div>
+          </div>
+          <span class="time-label" id="total-duration">0:00</span>
+        </div>
+      </div>
+
+      <!-- Right: Volume, EQ & Queue Toggle -->
+      <div class="bar-right">
+        <button class="ctrl-btn" id="btn-queue-toggle" title="当前播放队列" style="position:relative;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6"></line>
+            <line x1="8" y1="12" x2="21" y2="12"></line>
+            <line x1="8" y1="18" x2="21" y2="18"></line>
+            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+          </svg>
+          <span class="queue-btn-badge" id="queue-count-badge" style="display:none;">0</span>
+        </button>
+        <button class="ctrl-btn" id="btn-toggle-eq" title="硬件级 7 段流体均衡器 (EQ)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="4" y1="21" x2="4" y2="14"></line>
+            <line x1="4" y1="10" x2="4" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12" y2="3"></line>
+            <line x1="20" y1="21" x2="20" y2="16"></line>
+            <line x1="20" y1="12" x2="20" y2="3"></line>
+            <line x1="1" y1="14" x2="7" y2="14"></line>
+            <line x1="9" y1="8" x2="15" y2="8"></line>
+            <line x1="17" y1="16" x2="23" y2="16"></line>
+          </svg>
+        </button>
+        <button class="ctrl-btn" id="btn-volume-icon" title="静音切换">
+          <svg id="icon-vol-high" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+        </button>
+        <div class="volume-slider-wrap" id="volume-slider-wrap">
+          <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.8" class="glass-slider" style="--val-pct: 80%;">
+          <div class="volume-slider-tooltip" id="volume-slider-tooltip">
+            <span class="vol-tip-icon" id="vol-tip-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+            </span>
+            <span class="vol-tip-pct" id="vol-tip-pct">80%</span>
+          </div>
+        </div>
+        <button class="ctrl-btn btn-exit-mini" id="btn-exit-mini-mode" title="恢复完整窗口界面 (M / Esc)" style="display: none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="16" rx="3"></rect>
+            <line x1="3" y1="9" x2="21" y2="9"></line>
+            <polyline points="8 15 12 12 16 15"></polyline>
+            <line x1="12" y1="12" x2="12" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </footer>
+
+    <!-- Window Resize Handles (Border & Corners with Wireframe Preview Support - Positioned after titlebar for no-drag hole punching) -->
+    <div class="window-resize-handle resize-t" data-edge="t"></div>
+    <div class="window-resize-handle resize-b" data-edge="b"></div>
+    <div class="window-resize-handle resize-l" data-edge="l"></div>
+    <div class="window-resize-handle resize-r" data-edge="r"></div>
+    <div class="window-resize-handle resize-tl" data-edge="tl"></div>
+    <div class="window-resize-handle resize-tr" data-edge="tr"></div>
+    <div class="window-resize-handle resize-bl" data-edge="bl"></div>
+    <div class="window-resize-handle resize-br" data-edge="br"></div>
+
+  </div>
+
+  <!-- Slide-out Glass Playback Queue Drawer -->
+  <aside class="glass-queue-drawer" id="glass-queue-drawer">
+    <div class="queue-drawer-header">
+      <div class="queue-drawer-title">
+        <span>当前播放队列</span>
+        <span class="queue-total-count" id="queue-drawer-count">· 0 首</span>
+      </div>
+      <div class="queue-header-actions">
+        <button class="glass-text-btn" id="btn-clear-queue" title="清空队列">清空</button>
+        <button class="glass-icon-btn btn-close-queue" id="btn-close-queue" title="关闭队列">&times;</button>
+      </div>
+    </div>
+    <div class="queue-track-list" id="queue-track-list">
+      <div class="queue-scroll-spacer" id="queue-scroll-spacer"></div>
+      <div class="queue-pool-container" id="queue-pool-container"></div>
+      <div class="empty-hint">当前播放队列为空</div>
+    </div>
+  </aside>
+
+  <!-- Glass Hardware Equalizer Console (Multi-layer Redesign) -->
+  <div class="glass-eq-modal" id="glass-eq-modal" style="display:none;">
+    <div class="eq-header">
+      <div class="eq-title-wrap">
+        <svg class="eq-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:18px;height:18px;color:var(--accent-primary);">
+          <line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line>
+          <line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line>
+          <line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line>
+        </svg>
+        <span class="eq-title">均衡器</span>
+        <label class="switch switch-mini" title="均衡器直通/开启">
+          <input type="checkbox" id="eq-switch-enable" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+      <button class="eq-close-btn" id="btn-close-eq">✕</button>
+    </div>
+
+    <!-- EQ Preset In-Bounds Info & Name Badge -->
+    <div class="eq-preset-info-banner">
+      <span class="eq-preset-banner-label">预设风格</span>
+      <span class="eq-preset-name-badge" id="eq-preset-name-badge">平直原生 · 纯净无染色</span>
+    </div>
+
+    <!-- EQ Presets Two-Line Container (Default Logos & Custom Saved Track) -->
+    <div class="eq-presets-wrap" id="eq-presets-wrap">
+      <!-- Line 1: 12 Default Presets as Clean Mini Logos / Icons -->
+      <div class="eq-logos-row" id="eq-logos-row">
+        <button class="eq-preset-btn eq-preset-logo-btn active" data-preset="flat" data-name="平直原生" data-desc="平直原生 · 纯净监听无染色" title="平直原生">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="12" x2="21" y2="12"></line><circle cx="12" cy="12" r="2.5" fill="currentColor"></circle></svg>
+        </button>
+        <button class="eq-preset-btn eq-preset-logo-btn" data-preset="bass" data-name="重低音增强" data-desc="重低音增强 · 震撼低频下潜" title="重低音增强">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="19" x2="5" y2="7"></line><line x1="10" y1="19" x2="10" y2="11"></line><line x1="15" y1="19" x2="15" y2="15"></line><line x1="20" y1="19" x2="20" y2="18"></line></svg>
+        </button>
+        <button class="eq-preset-btn eq-preset-logo-btn" data-preset="vocal" data-name="清澈人声" data-desc="清澈人声 · 中频甜美人声靠前" title="清澈人声">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+        </button>
+        <button class="eq-preset-btn eq-preset-logo-btn" data-preset="warm" data-name="温暖黑胶" data-desc="温暖黑胶 · 复古模拟温润声底" title="温暖黑胶">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="3" fill="currentColor"></circle><path d="M12 6a6 6 0 0 1 6 6"></path></svg>
+        </button>
+        <button class="eq-preset-btn eq-preset-logo-btn" data-preset="electronic" data-name="流行电音" data-desc="流行电音 · 动感节奏与宽广声场" title="流行电音">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 12 6 12 9 4 15 20 18 12 22 12"></polyline></svg>
+        </button>
+        <button class="eq-preset-btn eq-preset-logo-btn" data-preset="rock" data-name="摇滚现场" data-desc="摇滚现场 · 激昂电吉他与鼓点爆发" title="摇滚现场">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        </button>
+        <button class="eq-preset-btn eq-preset-logo-btn" data-preset="classical" data-name="古典交响" data-desc="古典交响 · 层次分明的乐器分离度" title="古典交响">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3" fill="currentColor"></circle><circle cx="18" cy="16" r="3" fill="currentColor"></circle></svg>
+        </button>
+        <button class="eq-preset-btn eq-preset-logo-btn" data-preset="jazz" data-name="纯正爵士" data-desc="纯正爵士 · 萨克斯与低音贝斯共鸣" title="纯正爵士">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="18" r="3"></circle><path d="M9 18V7c0-1.5 1-2.5 2.5-2.5h1C15 4.5 16 6 16 8v6"></circle><circle cx="16" cy="14" r="2"></circle><path d="M16 11h4l2-3H16"></path></svg>
+        </button>
+        <button class="eq-preset-btn eq-preset-logo-btn" data-preset="acg" data-name="ACG燃曲" data-desc="ACG燃曲 · 疾速节奏与元气高音" title="ACG燃曲">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+        </button>
+        <button class="eq-preset-btn eq-preset-logo-btn" data-preset="treble" data-name="通透高音" data-desc="通透高音 · 空灵通透的高频泛音" title="通透高音">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M2 12h20M5 5l14 14M19 5L5 19"></path></svg>
+        </button>
+        <button class="eq-preset-btn eq-preset-logo-btn" data-preset="deepbass" data-name="超重低音" data-desc="超重低音 · 次低频下潜震颤" title="超重低音">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3" fill="currentColor"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="9"></circle></svg>
+        </button>
+        <button class="eq-preset-btn eq-preset-logo-btn" data-preset="soft" data-name="柔和舒缓" data-desc="柔和舒缓 · 睡前防疲劳轻柔微调" title="柔和舒缓">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="15"></line></svg>
+        </button>
+      </div>
+
+      <!-- Line 2: Custom Presets & User Saved Tuning Track (Capsule Slider with Zero Arrows) -->
+      <div class="eq-custom-row" id="eq-custom-row">
+        <button class="eq-preset-btn eq-custom-pill" data-preset="custom" id="btn-eq-custom" data-name="自定义特调" data-desc="自定义特调 · 自由拖动7段滑块调整">自定义特调</button>
+        <button class="eq-preset-btn btn-add-custom-eq" id="btn-add-custom-eq" title="将当前滑块参数保存为新的自定义预设">+ 保存预设</button>
+        <div class="eq-saved-custom-track" id="eq-saved-custom-track">
+          <!-- Dynamic saved custom preset chips -->
+        </div>
+      </div>
+    </div>
+
+    <!-- 7 Vertical Sliders -->
+    <div class="eq-sliders-row" id="eq-sliders-container">
+      <!-- 60Hz, 150Hz, 400Hz, 1kHz, 2.4kHz, 6kHz, 15kHz generated dynamically -->
+    </div>
+
+    <div class="eq-footer-hint">
+      双击滑块可快速复位至 0 dB · 实时 32 位 Web Audio DSP 滤波
+    </div>
+  </div>
+
+  <!-- Glass Drop Choice Modal (Drag and Drop Files / Folders) -->
+  <div class="glass-modal-backdrop" id="glass-drop-modal" style="display:none;">
+    <div class="glass-modal-card">
+      <div class="modal-header">
+        <h3 style="display:flex;align-items:center;gap:8px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:18px;height:18px;color:var(--accent-primary);">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>导入音乐文件</span>
+        </h3>
+        <button class="modal-close-btn" id="btn-close-drop-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="drop-summary" id="drop-modal-summary">
+          检测到拖入 0 个音乐文件
+        </div>
+        <div class="drop-choice-options">
+          <label class="drop-radio-label">
+            <input type="radio" name="drop-action" value="queue-play" checked>
+            <div class="radio-card-content">
+              <strong>添加到播放队列并立即播放</strong>
+              <span>放入当前播放队列首部，立刻开始享受音乐</span>
+            </div>
+          </label>
+          <label class="drop-radio-label">
+            <input type="radio" name="drop-action" value="library">
+            <div class="radio-card-content">
+              <strong>添加到本地音乐库</strong>
+              <span>永久保存到音乐库数据库，方便随时查找与分类</span>
+            </div>
+          </label>
+          <label class="drop-radio-label">
+            <input type="radio" name="drop-action" value="category">
+            <div class="radio-card-content">
+              <strong>添加到指定分类</strong>
+              <select id="drop-target-category" class="glass-select modal-select" style="margin-top:6px; width:100%;">
+                <!-- dynamic categories -->
+              </select>
+            </div>
+          </label>
+          <label class="drop-radio-label">
+            <input type="radio" name="drop-action" value="temp-queue">
+            <div class="radio-card-content">
+              <strong>仅作为临时播放队列</strong>
+              <span>追加到当前队列末尾，不写入音乐库</span>
+            </div>
+          </label>
+        </div>
+        <div class="modal-checkbox-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="drop-remember-pref">
+            <span>总是按此方式导入（可在系统设置中修改）</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="glass-pill-btn" id="btn-cancel-drop">取消</button>
+        <button class="glass-pill-btn btn-primary-accent" id="btn-confirm-drop">确定导入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Glass Category Create / Rename Modal -->
+  <div class="glass-modal-backdrop" id="glass-category-modal" style="display:none;">
+    <div class="glass-modal-card modal-compact">
+      <div class="modal-header">
+        <h3 id="cat-modal-title">新建分类</h3>
+        <button class="modal-close-btn" id="btn-close-cat-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="text" id="cat-name-input" class="glass-modal-input" placeholder="输入分类名称（例如：运动、黑暗、视频配乐...）" maxlength="24">
+      </div>
+      <div class="modal-footer">
+        <button class="glass-pill-btn" id="btn-cancel-cat">取消</button>
+        <button class="glass-pill-btn btn-primary-accent" id="btn-save-cat">保存分类</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Glass EQ Preset Rename Modal -->
+  <div class="glass-modal-backdrop" id="modal-rename-eq-preset" style="display:none;">
+    <div class="glass-modal-card modal-compact">
+      <div class="modal-header">
+        <h3 id="rename-eq-modal-title" style="display:flex;align-items:center;gap:8px;">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent-primary);">
+            <path d="M12 20h9"></path>
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+          </svg>
+          <span>重命名自定义预设</span>
+        </h3>
+        <button class="modal-close-btn" id="btn-close-rename-eq-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="text" id="input-rename-eq-preset" class="glass-modal-input" placeholder="输入预设名称（例如：超重低音、人声特调...）" maxlength="20">
+      </div>
+      <div class="modal-footer">
+        <button class="glass-pill-btn" id="btn-cancel-rename-eq">取消</button>
+        <button class="glass-pill-btn btn-primary-accent" id="btn-confirm-rename-eq">确定保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EQ Custom Preset Context Menu (Rename & Delete) -->
+  <div class="glass-context-menu" id="eq-preset-context-menu" style="display:none; position:fixed; z-index:99999;">
+    <div class="context-item" id="eq-ctx-rename">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
+        <path d="M12 20h9"></path>
+        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+      </svg>
+      <span>重命名预设</span>
+    </div>
+    <div class="context-item danger" id="eq-ctx-delete">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+      </svg>
+      <span>删除此预设</span>
+    </div>
+  </div>
+
+  <!-- Glass Batch Category Modal -->
+  <div class="glass-modal-backdrop" id="glass-batch-category-modal" style="display:none;">
+    <div class="glass-modal-card modal-compact">
+      <div class="modal-header">
+        <h3>添加到分类</h3>
+        <button class="modal-close-btn" id="btn-close-batch-cat-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="font-size:13px; color:var(--text-dim); margin-bottom:10px;">选择要将选中的歌曲添加到的分类：</div>
+        <select id="batch-cat-select" class="glass-select modal-select" style="width:100%;">
+          <!-- dynamic categories -->
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button class="glass-pill-btn" id="btn-cancel-batch-cat">取消</button>
+        <button class="glass-pill-btn btn-primary-accent" id="btn-confirm-batch-cat">确定加入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Glass Tag Management Modal -->
+  <div class="glass-modal-backdrop" id="glass-tag-modal" style="display:none;">
+    <div class="glass-modal-card">
+      <div class="modal-header">
+        <h3 id="tag-modal-title" style="display:flex;align-items:center;gap:8px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:18px;height:18px;color:var(--accent-primary);">
+            <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"></path><circle cx="7" cy="7" r=".5" fill="currentColor"></circle>
+          </svg>
+          <span>管理歌曲标签</span>
+        </h3>
+        <button class="modal-close-btn" id="btn-close-tag-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="tag-section-title">当前标签：</div>
+        <div class="current-tags-wrap" id="modal-current-tags">
+          <!-- Active tag chips with 'x' -->
+        </div>
+
+        <div class="tag-section-title" style="margin-top:14px;">快速添加预设标签：</div>
+        <div class="preset-tag-group">
+          <div class="preset-label">情绪：</div>
+          <div class="preset-pills" id="modal-preset-moods">
+            <span class="preset-pill" data-tag="黑暗">黑暗</span>
+            <span class="preset-pill" data-tag="悲伤">悲伤</span>
+            <span class="preset-pill" data-tag="温暖">温暖</span>
+            <span class="preset-pill" data-tag="神秘">神秘</span>
+            <span class="preset-pill" data-tag="庄严">庄严</span>
+            <span class="preset-pill" data-tag="激昂">激昂</span>
+            <span class="preset-pill" data-tag="宁静">宁静</span>
+            <span class="preset-pill" data-tag="欢快">欢快</span>
+          </div>
+        </div>
+        <div class="preset-tag-group">
+          <div class="preset-label">用途：</div>
+          <div class="preset-pills" id="modal-preset-usages">
+            <span class="preset-pill" data-tag="开场">开场</span>
+            <span class="preset-pill" data-tag="背景">背景</span>
+            <span class="preset-pill" data-tag="转场">转场</span>
+            <span class="preset-pill" data-tag="高潮">高潮</span>
+            <span class="preset-pill" data-tag="结尾">结尾</span>
+            <span class="preset-pill" data-tag="旁白">旁白</span>
+            <span class="preset-pill" data-tag="主题曲">主题曲</span>
+          </div>
+        </div>
+
+        <div class="preset-tag-group" id="modal-preset-custom-group" style="display:none;">
+          <div class="preset-label">自标签：</div>
+          <div class="preset-pills" id="modal-preset-customs"></div>
+        </div>
+
+        <div class="tag-section-title" style="margin-top:14px;">新建自定义标签：</div>
+        <div class="add-custom-tag-row">
+          <input type="text" id="custom-tag-input" class="glass-modal-input" placeholder="输入自定义标签名称并回车..." maxlength="18">
+          <button class="glass-pill-btn" id="btn-add-custom-tag">+ 添加</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="glass-pill-btn" id="btn-cancel-tag-modal">取消</button>
+        <button class="glass-pill-btn btn-primary-accent" id="btn-save-tag-modal">保存标签</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fullscreen Drag-and-Drop Overlay -->
+  <div class="drag-drop-full-overlay" id="drag-drop-overlay" style="display:none;">
+    <div class="drag-drop-content">
+      <div class="drag-drop-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:48px;height:48px;color:var(--accent-primary);">
+          <path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>
+        </svg>
+      </div>
+      <div class="drag-drop-title">松开鼠标导入音乐</div>
+      <div class="drag-drop-desc">支持单个/多个音乐文件及音乐文件夹，将自动解析并去重</div>
+    </div>
+  </div>
+
+  <!-- Audio Element for AudioEngine -->
+  <audio id="audio-player" preload="auto"></audio>
+
+  <!-- Comprehensive Glass Context Menu -->
+  <div id="glass-context-menu" class="glass-context-menu" style="display: none;">
+    <div class="menu-item" id="ctx-play">
+      <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+      <span>立即播放</span>
+    </div>
+    <div class="menu-item" id="ctx-play-next">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="5 12 19 12"></polyline><polyline points="12 5 19 12 12 19"></polyline></svg>
+      <span>接下来播放</span>
+    </div>
+    <div class="menu-item" id="ctx-add-queue">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span>添加到播放队列</span>
+    </div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" id="ctx-favorite">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+      <span id="ctx-favorite-label">收藏歌曲</span>
+    </div>
+    <div class="menu-item menu-parent" id="ctx-category-parent">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+      <span>添加到分类 &gt;</span>
+      <div class="menu-submenu" id="ctx-category-submenu">
+        <!-- Submenu items populated dynamically -->
+      </div>
+    </div>
+    <div class="menu-item" id="ctx-manage-tags">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+      <span>管理歌曲标签...</span>
+    </div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" id="ctx-info">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+      <span>查看歌曲信息</span>
+    </div>
+    <div class="menu-item" id="ctx-reveal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+      <span>在系统文件夹中显示</span>
+    </div>
+    <div class="menu-divider" id="ctx-del-divider-1"></div>
+    <div class="menu-item" id="ctx-remove-from-cat" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+      <span id="ctx-remove-cat-label">从当前分类移除</span>
+    </div>
+    <div class="menu-item" id="ctx-remove-from-library">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+      <span id="ctx-remove-lib-label">从音乐库移除</span>
+    </div>
+    <div class="menu-divider" id="ctx-del-divider-2"></div>
+    <div class="menu-item danger" id="ctx-delete-file">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+      <span id="ctx-delete-file-label">删除本地文件</span>
+    </div>
+  </div>
+
+  <!-- Dedicated Category Right-Click Context Menu (Requirement 2) -->
+  <div id="category-context-menu" class="glass-context-menu" style="display: none;">
+    <div class="menu-item" id="cat-ctx-play">
+      <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+      <span>播放该分类全部歌曲</span>
+    </div>
+    <div class="menu-item" id="cat-ctx-add-queue">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+      <span>添加到播放队列</span>
+    </div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" id="cat-ctx-rename">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+      <span>重命名分类...</span>
+    </div>
+    <div class="menu-item" id="cat-ctx-clear-tracks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+      <span>清空分类中歌曲</span>
+    </div>
+    <div class="menu-divider"></div>
+    <div class="menu-item danger" id="cat-ctx-delete">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+      <span>删除分类</span>
+    </div>
+  </div>
+
+  <!-- Floating Category Icon Picker Popover (Requirement 5) -->
+  <div id="category-icon-picker" class="category-icon-picker" style="display: none;">
+    <div class="icon-picker-header">
+      <span class="icon-picker-title">选择分类专属图标</span>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="icon-picker-count">共 22 款</span>
+        <span class="icon-picker-close" id="btn-close-icon-picker" style="cursor: pointer; opacity: 0.7; font-size: 11px; padding: 2px 4px; border-radius: 4px;" title="关闭">✕</span>
+      </div>
+    </div>
+    <div class="icon-picker-grid" id="icon-picker-grid"></div>
+  </div>
+
+  <!-- Top-Level Fullscreen Exit Control (Direct child of body: Never trapped or intercepted) -->
+  <button class="fullscreen-exit-overlay" id="fullscreen-exit-control" title="退出全屏视觉模式 (ESC)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+    </svg>
+    <span>退出全屏 (ESC)</span>
+  </button>
+
+  <!-- Acrylic Glass Confirmation Modal Dialog (Replaces native browser/OS confirm dialogs - Requirement 1) -->
+  <div id="glass-confirm-dialog" class="glass-confirm-backdrop" style="display: none;">
+    <div class="glass-confirm-card" role="dialog" aria-modal="true">
+      <div class="glass-confirm-icon-wrap" id="confirm-icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          <line x1="12" y1="9" x2="12" y2="13"></line>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      </div>
+      <div class="glass-confirm-body">
+        <h3 class="glass-confirm-title" id="confirm-title">确认操作</h3>
+        <p class="glass-confirm-msg" id="confirm-msg">确定要继续此操作吗？</p>
+        <p class="glass-confirm-sub" id="confirm-sub"></p>
+      </div>
+      <div class="glass-confirm-actions">
+        <button type="button" class="confirm-btn confirm-btn-cancel" id="confirm-btn-cancel">取消</button>
+        <button type="button" class="confirm-btn confirm-btn-danger" id="confirm-btn-ok">确认删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Acrylic Glass Modal: Save Custom Preset -->
+  <div id="modal-save-preset" class="glass-confirm-backdrop" style="display: none;">
+    <div class="glass-confirm-card" role="dialog" aria-modal="true" style="max-width: 440px;">
+      <div class="glass-confirm-icon-wrap" style="color: var(--accent-primary); background: rgba(138, 196, 255, 0.12);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+          <polyline points="17 21 17 13 7 13 7 21"></polyline>
+          <polyline points="7 3 7 8 15 8"></polyline>
+        </svg>
+      </div>
+      <div class="glass-confirm-body" style="width: 100%;">
+        <h3 class="glass-confirm-title" style="margin-bottom: 6px;">保存自定皮肤预设</h3>
+        <p class="glass-confirm-msg" style="margin-bottom: 14px; font-size: 13px;">保存当前背景图片、透明度、界面配色和动态效果。输入名称，方便以后通过缩略图查找。</p>
+        <input type="text" id="input-preset-name" class="glass-modal-input" placeholder="输入预设名称（如：午夜流光、深空极光...）" maxlength="24" style="width: 100%; box-sizing: border-box; padding: 10px 14px; border-radius: 8px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.16); color: #ffffff; font-size: 13px; outline: none; margin-bottom: 6px;">
+      </div>
+      <div class="glass-confirm-actions">
+        <button type="button" class="confirm-btn confirm-btn-cancel" id="btn-cancel-save-preset">取消</button>
+        <button type="button" class="confirm-btn confirm-btn-primary" id="btn-confirm-save-preset" style="background: rgba(138, 196, 255, 0.22); border-color: rgba(138, 196, 255, 0.6); color: #ffffff;">确认保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modular Scripts -->
+  <script src="js/colorEngine.js"></script>
+  <script src="js/audioEngine.js"></script>
+  <script src="js/visualizer.js"></script>
+  <script src="js/parallax.js"></script>
+  <script src="js/interfaceTheme.js"></script>
+  <script src="js/skinFiles.js"></script>
+  <script src="js/shortcuts.js"></script>
+<script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

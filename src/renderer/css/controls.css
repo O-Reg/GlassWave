@@ -1,0 +1,224 @@
+/* Keep slider geometry independent from changing values and descriptive text. */
+.stable-slider-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px !important;
+  align-items: center !important;
+}
+.stable-slider-row > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16ch;
+  gap: 8px;
+  min-width: 0 !important;
+  min-height: 2.6em;
+  align-items: center;
+  line-height: 1.3;
+}
+.stable-slider-row > div > span {
+  min-width: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.stable-slider-row > input[type="range"] {
+  width: 100% !important;
+  min-width: 0;
+  margin: 8px 0 10px;
+  box-sizing: border-box;
+}
+
+/* Round menu thumbs stay centered without tall capsules. */
+.glass-slider::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+/* Rotate a conventional horizontal native range: deterministic track/thumb
+   centering, native dragging and keyboard operation without vertical quirks. */
+.eq-slider-track { position: relative; min-height: 120px; padding: 0; }
+.eq-slider-vertical {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 120px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  writing-mode: horizontal-tb;
+  direction: ltr;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  background: transparent;
+  overflow: visible;
+}
+.eq-slider-vertical::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 6px;
+  border: 0;
+  border-radius: 3px;
+  background: linear-gradient(to right,
+    rgba(255, 255, 255, 0.16) 0 var(--eq-from, 50%),
+    var(--accent-primary, #8ac4ff) var(--eq-from, 50%) var(--eq-to, 50%),
+    rgba(255, 255, 255, 0.16) var(--eq-to, 50%) 100%);
+}
+.eq-slider-vertical::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -4px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+}
+.eq-slider-vertical:focus-visible {
+  outline: 2px solid var(--accent-primary, #8ac4ff);
+  outline-offset: 3px;
+}
+.eq-val-badge { white-space: nowrap; }
+
+.vis-color-controls {
+  padding: 12px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.vis-color-presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.vis-color-presets .active { border-color: var(--accent-primary); background: rgba(138,196,255,.18); }
+
+/* Let WebKit pseudo-elements own the scrollbars; standard 'thin/color' rules
+   override these in Chromium and bring back native arrows and square thumbs. */
+*::-webkit-scrollbar { width: 8px !important; height: 8px !important; }
+*::-webkit-scrollbar-track { background: transparent !important; border-radius: 999px !important; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(190,205,226,.42) !important;
+  border: 2px solid transparent !important;
+  background-clip: padding-box !important;
+  border-radius: 999px !important;
+  min-height: 28px;
+  min-width: 28px;
+}
+*::-webkit-scrollbar-thumb:hover { background-color: rgba(190,205,226,.7) !important; }
+*::-webkit-scrollbar-button,
+*::-webkit-scrollbar-button:single-button,
+*::-webkit-scrollbar-button:double-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+*::-webkit-scrollbar-corner { background: transparent !important; }
+.settings-content { scrollbar-gutter: stable; }
+
+/* Reserve the horizontal scroll channel even with no saved presets. */
+#eq-custom-row {
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
+  flex: 0 0 48px;
+  align-items: flex-start;
+}
+#eq-custom-row > button { flex-shrink: 0; margin-top: 4px; }
+#eq-saved-custom-track {
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
+  box-sizing: border-box;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  align-items: flex-start;
+  padding: 4px 0 8px;
+}
+#eq-saved-custom-track > * { flex-shrink: 0; }
+.reactive-layout-label { display: grid; gap: 8px; margin: 8px 0 16px; font-size: 13px; }
+
+/* Fixed parameter geometry, including nested legacy slider headers. */
+.settings-content { overflow-x:hidden; }
+.settings-content label, .parameter-heading { min-width:0; }
+.stable-slider-row > div { grid-template-columns:minmax(0,1fr) 10ch; height:36px; min-height:36px; }
+.stable-slider-row label { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.parameter-heading { display:grid;grid-template-columns:minmax(0,1fr) 6ch;align-items:center;height:36px; }
+.parameter-heading span { text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums; }
+.luma-color-grid,.luma-preset-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px; }
+.luma-color-grid button,.luma-preset-grid button { padding:6px 2px!important;white-space:nowrap;font-size:11px!important; }
+.palette-setting { display:grid;gap:10px;margin-bottom:14px; }
+.vis-solid-swatches { display:flex;gap:8px;align-items:center; }
+.vis-solid-swatches button { width:25px;height:25px;flex:0 0 25px;border-radius:50%;border:2px solid transparent;background:var(--swatch); }
+.vis-solid-swatches button.active { border-color:white;box-shadow:0 0 0 2px #778899; }
+.custom-solid-label { display:flex;align-items:center;gap:8px;font-size:12px; }
+#vis-solid-color { width:38px;height:28px;padding:0;border:0;background:none; }
+#view-visualizer-drawer #btn-close-vis-drawer { display:flex!important;flex-shrink:0; }
+:root { --desktop-reveal:0; }
+body #app-shell, body.window-glass-active .glass-app-shell { background:rgba(8,12,22,calc(1 - var(--desktop-reveal)))!important;backdrop-filter:none!important; }
+body #ambient-canvas,body.window-glass-active #ambient-canvas,body .noise-overlay,body .vignette-overlay { opacity:calc(1 - var(--desktop-reveal))!important; }
+body.window-glass-active .glass-sidebar,body.window-glass-active .glass-player-bar,body.window-glass-active .glass-titlebar,
+body.window-glass-active .glass-settings-drawer,body.window-glass-active .glass-queue-drawer,body.window-glass-active #glass-eq-modal,
+body.window-glass-active .glass-modal,body.window-glass-active .glass-context-menu,
+body #view-settings,body #view-visualizer-drawer {
+ background:rgba(18,22,34,calc(1 - var(--window-glass-ratio,0)))!important;
+}
+
+body.window-glass-active .noise-overlay,body.window-glass-active .acrylic-noise-overlay,body.window-glass-active .vignette-overlay { opacity:calc(1 - var(--desktop-reveal))!important; }
+body.window-glass-active .glass-modal-card, body.window-glass-active .glass-eq-modal { background:rgba(18,22,34,calc(1 - var(--window-glass-ratio,0)))!important; }
+#view-visualizer-drawer #btn-close-vis-drawer { width:28px;height:28px;align-items:center;justify-content:center;border:0;border-radius:50%;background:rgba(255,255,255,.1);color:var(--text-primary,#fff);font-size:21px;cursor:pointer; }
+.stable-slider-row > div > :first-child { white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+/* Parameter rows own their layout; controls never share a grid cell. */
+.settings-content > *, .custom-bg-sliders-box > * { flex-shrink:0; }
+.settings-content .parameter-row { display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:6px!important;min-width:0;padding-top:4px;padding-bottom:6px; }
+.settings-content .parameter-row > .parameter-heading { display:grid!important;grid-template-columns:minmax(0,1fr) 13ch!important;gap:10px!important;height:28px!important;min-height:28px!important;align-items:center;line-height:20px;font-size:13px; }
+.parameter-heading > label { overflow:hidden;white-space:nowrap;text-overflow:ellipsis; }
+.parameter-value { display:block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap!important;text-align:right;font-variant-numeric:tabular-nums; }
+.settings-content .parameter-row > input[type=range] { flex:none!important;display:block;width:100%!important;min-width:0;height:22px;margin:0!important;padding:0;box-sizing:border-box; }
+.parameter-actions { display:flex!important;flex-wrap:wrap;gap:6px;min-height:28px; }
+#transparency-controls { display:flex!important;flex-direction:column;align-items:stretch;gap:6px;padding:14px; }
+#transparency-controls .parameter-row { padding:0; }
+#transparency-controls .setting-desc { margin:3px 0;font-size:12px;line-height:1.5; }
+#transparency-controls > button { align-self:flex-start;padding:4px 10px; }
+#settings-header-main { justify-content:flex-start;gap:12px; }
+#settings-header-main > #btn-close-settings { display:flex!important;position:static!important;order:-1;align-items:center;justify-content:center;width:28px;height:28px;flex:0 0 28px; }
+#settings-header-main .settings-drawer-actions:empty { display:none; }
+/* Do not animate panel geometry or rerasterize large blur surfaces every frame. */
+body .glass-settings-drawer,body.window-glass-active .glass-settings-drawer,body.zen-mode #view-settings,body #view-settings,body #view-visualizer-drawer,
+body .glass-sidebar,body.zen-mode .glass-sidebar,body.window-glass-active .glass-sidebar,
+body .glass-player-bar,body.zen-mode .glass-player-bar,body.window-glass-active .glass-player-bar,
+body .glass-titlebar,body.window-glass-active .glass-titlebar {
+ backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+ transition:transform 120ms ease-out,opacity 100ms linear!important;
+}
+body .glass-settings-drawer.open { box-shadow:-8px 0 20px rgba(0,0,0,.25)!important; }
+body .glass-stage,body .player-stage,body #parallax-deck,body #app-shell { transition:none!important; }
+body .settings-content .setting-item,body input[type=range],body input[type=range]::-webkit-slider-thumb { transition:none!important; }
+body.direct-interaction *,body.direct-interaction *::before,body.direct-interaction *::after {
+ transition:none!important;animation-play-state:paused!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+}
+body .glass-confirm-backdrop { backdrop-filter:none!important;-webkit-backdrop-filter:none!important;transition:opacity 100ms linear,visibility 100ms linear; }
+.settings-content .parameter-row > input[type=range] { background:transparent!important; }
+.settings-content .parameter-row > input[type=range]::-webkit-slider-runnable-track { height:4px;border-radius:2px;background:rgba(255,255,255,.22); }
+.settings-content .parameter-row > input[type=range].has-progress-fill::-webkit-slider-runnable-track { background:linear-gradient(to right,var(--accent-primary) var(--val-pct,0%),rgba(255,255,255,.22) var(--val-pct,0%)); }
+.settings-content .parameter-row > input[type=range]::-webkit-slider-thumb { width:14px;height:14px;margin-top:-5px;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.4); }
+.settings-content .setting-info { min-width:0; }
+.settings-content .switch { flex-shrink:0; }
+.transparency-heading { display:flex;align-items:center;justify-content:space-between;gap:8px; }
+.transparency-heading button { font-size:11px;padding:3px 8px; }
+body .glass-settings-drawer,body.window-glass-active .glass-settings-drawer,body.zen-mode #view-settings,body #view-settings,body #view-visualizer-drawer { transition:opacity 80ms linear!important; }
+body .glass-settings-drawer:not(.open) { opacity:0!important; }
+body .glass-settings-drawer.open { opacity:1!important; }
+body .glass-eq-modal,body .glass-context-menu { animation:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important; }
+
+body.window-fullscreen .window-resize-handle,body.is-maximized .window-resize-handle { display:none!important; }
+
+/* Mode changes commit layout once. Inner controls never tween their width/margins. */
+body.zen-switching *,body.zen-switching *::before,body.zen-switching *::after { transition:none!important; }
+body .glass-player-bar .mini-meta,body .glass-player-bar .bar-left,body .glass-player-bar .bar-right,
+body .glass-player-bar .timeline-wrap,body .glass-player-bar .playback-controls,
+body .glass-sidebar .sidebar-bottom-panel { transition:none!important; }
+body.zen-mode .glass-sidebar { opacity:1!important;transition:transform 180ms cubic-bezier(.2,0,0,1)!important;box-shadow:none!important; }
+body.zen-mode .glass-player-bar { transition:left 180ms cubic-bezier(.2,0,0,1),transform 100ms ease-out,opacity 80ms linear!important;box-shadow:none!important; }
+body.zen-mode .glass-player-bar { transform:translateY(12px)!important; }
+body.zen-mode.zen-show-player-bar .glass-player-bar,body.zen-mode.zen-interactive-open .glass-player-bar,body.zen-mode .glass-player-bar:hover { transform:translateY(0)!important; }
+
+/* Keep the bottom dock on a stable composited layer for both reveal and hide. */
+body.zen-mode .glass-player-bar { will-change:transform,opacity; }
+body.zen-mode .glass-player-bar .bar-center,
+body.zen-mode .glass-player-bar .timeline-track,
+body.zen-mode .glass-player-bar .timeline-progress,
+body.zen-mode .glass-player-bar .timeline-handle { transition:none!important; }

@@ -1,0 +1,12 @@
+node_modules/
+.npm-cache/
+dist/
+data/
+*.log
+*.zip
+*.7z
+*.exe
+.env
+.env.*
+.DS_Store
+Thumbs.db

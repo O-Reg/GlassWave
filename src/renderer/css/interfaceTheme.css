@@ -1,0 +1,108 @@
+#interface-color-settings { display:flex;flex-direction:column;align-items:stretch;gap:12px; }
+.ui-theme-row { display:grid;grid-template-columns:minmax(95px,1fr) 34px 88px auto;align-items:center;gap:8px;margin:9px 0; }
+label.ui-theme-row { grid-template-columns:1fr 160px; }
+.ui-theme-row input[type=color] { width:34px;height:28px;border:0;padding:0;background:none;cursor:pointer; }
+.ui-theme-row input[type=text],.ui-theme-save input { min-width:0;width:100%;box-sizing:border-box;padding:6px;border:1px solid var(--ui-border,#556);border-radius:6px;background:transparent;color:inherit; }
+.ui-theme-save { display:flex;gap:8px; }.ui-theme-save select,.ui-theme-save input{flex:1;min-width:0;}
+#ui-color-individual[hidden]{display:none!important;}#ui-theme-status{font-size:12px;min-height:18px;}
+body.ui-custom-colors { --accent-primary:var(--ui-accent);--accent-secondary:var(--ui-accent);--accent-glow:rgba(var(--ui-accent-rgb),.35);--text-main:var(--ui-background-ink);--text-primary:var(--text-main);--text-muted:var(--ui-muted);--text-dim:var(--ui-muted);--glass-border-light:var(--ui-border);--glass-border-subtle:var(--ui-border);--glass-bg-hover:rgba(var(--ui-accent-rgb),.14);--glass-bg-active:rgba(var(--ui-accent-rgb),.24);color:var(--text-main); }
+body.ui-custom-colors #app-shell { background:rgba(var(--ui-background-rgb),calc(1 - var(--desktop-reveal,0)))!important; }
+body.ui-custom-colors .noise-overlay,body.ui-custom-colors .vignette-overlay { opacity:0!important; }
+body.ui-custom-colors :is(.glass-sidebar,.glass-player-bar,.glass-titlebar,.glass-settings-drawer,.glass-queue-drawer,.glass-eq-modal,.glass-modal-card,.glass-context-menu,.glass-confirm-card,.library-stage,.folders-stage) { --text-main:var(--ui-panel-ink);--text-primary:var(--text-main);color:var(--text-main)!important;background:rgba(var(--ui-panel-rgb),calc(1 - var(--window-glass-ratio,0)))!important;border-color:var(--ui-border)!important; }
+body.ui-custom-colors #view-settings,body.ui-custom-colors #view-visualizer-drawer { --text-main:var(--ui-panel-ink);--text-primary:var(--text-main);background:rgba(var(--ui-panel-rgb),calc(1 - var(--window-glass-ratio,0)))!important;color:var(--text-main)!important; }
+body.ui-custom-colors .glass-sidebar { --text-main:var(--ui-sidebar-ink);background:rgba(var(--ui-sidebar-rgb),calc(1 - var(--window-glass-ratio,0)))!important; }
+body.ui-custom-colors .glass-titlebar { --text-main:var(--ui-topbar-ink);background:rgba(var(--ui-topbar-rgb),calc(1 - var(--window-glass-ratio,0)))!important; }
+body.ui-custom-colors .glass-player-bar { --text-main:var(--ui-playerbar-ink);background:rgba(var(--ui-playerbar-rgb),calc(1 - var(--window-glass-ratio,0)))!important; }
+body.ui-custom-colors :is(.setting-title,.setting-desc,.parameter-heading,.nav-item,.category-row,.track-title,.track-artist,.track-album,.ctrl-btn,.win-btn,.glass-pill-btn,.vis-tab,.vis-tune-tab,.mini-title,.mini-artist,.time-label,.track-row,.folder-card,summary) { color:var(--text-main)!important;text-shadow:none!important; }
+body.ui-custom-colors :is(button,input,select) { color:var(--text-main); }
+body.ui-custom-colors :is(.glass-select,select option,.setting-item,.folder-card,.track-table-header,.search-input,.sidebar-bottom-panel) { background-color:rgba(var(--ui-panel-rgb),.92)!important;border-color:var(--ui-border)!important; }
+body.ui-custom-colors :is(.nav-item.active,.vis-tab.active,.vis-tune-tab.active,.track-row.selected,.track-row.playing,.queue-row.playing) { background:var(--ui-selection)!important;--text-main:var(--ui-selection-ink);--text-muted:var(--ui-selection-ink);color:var(--text-main)!important; }
+body.ui-custom-colors :is(.track-row.selected,.track-row.playing) * { color:var(--ui-selection-ink)!important; }
+body.ui-custom-colors .timeline-track::before { background:var(--ui-track)!important; }
+body.ui-custom-colors .timeline-progress { background:var(--ui-accent)!important;box-shadow:0 0 0 1px var(--ui-border)!important; }
+body.ui-custom-colors :is(.timeline-handle,.volume-fill,.volume-thumb) { background:var(--ui-accent)!important;outline:1px solid var(--ui-border); }
+body.ui-custom-colors :is(.ctrl-btn-play,.play-btn) { background:var(--ui-accent)!important;color:var(--ui-accent-ink)!important; }
+body.ui-custom-colors .parameter-value { color:var(--text-main)!important; }
+body.ui-custom-colors :is(.nav-item,.category-row,.track-row,.ctrl-btn,.win-btn,.glass-pill-btn,.vis-tab,.vis-tune-tab) { transition:none!important; }
+body.ui-custom-colors :is(.brand-name,.settings-drawer-title,.queue-drawer-title,.settings-drawer-title span,.queue-drawer-title span,.modal-title,.eq-title) { color:var(--text-main)!important;text-shadow:none!important; }
+body.ui-custom-colors .settings-content input[type=range]::-webkit-slider-runnable-track { background:var(--ui-track)!important; }
+body.ui-custom-colors .settings-content input[type=range].has-progress-fill::-webkit-slider-runnable-track { background:linear-gradient(to right,var(--ui-accent) var(--val-pct,0%),var(--ui-track) var(--val-pct,0%))!important; }
+body.ui-custom-colors .settings-content input[type=range]::-webkit-slider-thumb { background:var(--ui-accent)!important;border:1px solid var(--ui-track)!important;box-shadow:none!important; }
+body.ui-custom-colors .glass-sidebar { --text-muted:var(--ui-sidebar-ink);--text-dim:var(--ui-sidebar-ink); }
+body.ui-custom-colors .glass-titlebar { --text-muted:var(--ui-topbar-ink);--text-dim:var(--ui-topbar-ink); }
+body.ui-custom-colors .glass-player-bar { --text-muted:var(--ui-playerbar-ink);--text-dim:var(--ui-playerbar-ink); }
+body.ui-custom-colors :is(.setting-item,.folder-card,.sidebar-bottom-panel) { background-color:rgba(var(--ui-panel-rgb),calc(.3 * (1 - var(--window-glass-ratio,0))))!important; }
+body.ui-custom-colors .brand-name { background:none!important;-webkit-text-fill-color:var(--ui-topbar-ink)!important;color:var(--ui-topbar-ink)!important; }
+
+#album-wrap, #current-cover { -webkit-user-drag: none; user-select: none; }
+
+.preset-image-preview { display:block; width:100%; height:110px; padding:0; border:0; border-radius:9px; overflow:hidden; cursor:pointer; color:#fff; margin-bottom:10px; }
+.preset-image-preview img { display:block; width:100%; height:100%; object-fit:cover; pointer-events:none; }
+/* Skin library stays inside the existing settings drawer. */
+#skin-manager-page { display:none; flex:1 1 0; min-height:0; padding:16px 20px 20px; flex-direction:column; gap:12px; overflow:hidden; }
+#view-settings.skin-manager-open #settings-panel-main { display:none !important; }
+#view-settings.skin-manager-open #skin-manager-page { display:flex; }
+.skin-manager-toolbar { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.skin-manager-toolbar strong { flex:1; white-space:nowrap; font-size:14px; }
+#skin-manager-entry { gap:8px; }
+#skin-manager-entry button, .skin-manager-toolbar button { white-space:nowrap; }
+#skin-search { width:100%; box-sizing:border-box; flex-shrink:0; border:1px solid var(--glass-border,rgba(150,160,180,.3)); border-radius:9px; padding:10px 12px; background:rgba(128,128,128,.08); color:var(--text-main); }
+#skin-manager-scroll { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; scrollbar-gutter:stable; padding:2px 8px 12px 2px; }
+#skin-manager-scroll::-webkit-scrollbar { width:6px; }
+#skin-manager-scroll::-webkit-scrollbar-thumb { background:rgba(140,150,170,.5); border-radius:999px; }
+#skin-manager-scroll::-webkit-scrollbar-button { display:none; width:0; height:0; }
+#skin-manager-page .custom-preset-grid { grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; }
+#skin-manager-page .custom-preset-card { min-width:0; padding:10px; gap:8px; backdrop-filter:none; -webkit-backdrop-filter:none; transition:none; content-visibility:auto; contain-intrinsic-size:auto 210px; }
+#skin-manager-page .custom-preset-card:hover { transform:none; box-shadow:none; }
+#skin-manager-page .preset-meta-tags, #skin-manager-page .preset-swatch { display:none; }
+#skin-manager-page .preset-image-preview { height:105px; margin:0; }
+#skin-manager-page .preset-card-actions { margin:0; }
+#skin-manager-page .custom-preset-card.active::after { content:'已应用'; position:absolute; top:14px; left:14px; border-radius:6px; padding:3px 6px; background:#183952; color:#fff; font-size:11px; pointer-events:none; }
+#skin-manager-page summary { cursor:pointer; list-style:none; padding:5px 8px; border-radius:6px; color:var(--text-main); }
+#skin-manager-page summary::-webkit-details-marker { display:none; }
+.skin-card-more { position:relative; }
+#skin-manager-page .skin-card-more .btn-delete-preset { position:absolute; right:0; bottom:100%; width:100px; height:36px; border-radius:8px; background:#252d3a; color:#ffbaba; border:1px solid #616a78; z-index:2; font-size:12px; }
+#skin-manager-more > section { position:absolute; z-index:10; top:116px; left:20px; right:20px; background:var(--ui-panel,#192130); color:var(--text-main); border:1px solid var(--glass-border,#566071); border-radius:10px; padding:14px; box-shadow:0 8px 24px #0005; }
+
+/* Keyboard shortcuts live in a compact second page inside Settings. */
+#shortcut-entry { gap:10px; }
+#shortcut-entry { border:1px solid var(--glass-border-light,#ffffff28); border-radius:10px; background:rgba(128,160,210,.07); padding:12px 14px; }
+#shortcut-entry .setting-info { min-width:0; flex:1; }
+#shortcut-entry button { flex:none; white-space:nowrap; }
+#shortcut-page { display:none; flex:1 1 0; min-height:0; padding:16px 20px 20px; flex-direction:column; gap:10px; overflow:hidden; color:var(--text-main); }
+#view-settings.shortcuts-page-open #settings-panel-main { display:none !important; }
+#view-settings.shortcuts-page-open #shortcut-page { display:flex; }
+.shortcut-page-toolbar { display:flex; align-items:center; gap:8px; flex:none; }
+.shortcut-page-toolbar strong { flex:1; text-align:center; font-size:14px; }
+.shortcut-page-toolbar button { flex:none; white-space:nowrap; }
+.shortcut-page-scroll { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; scrollbar-gutter:stable; padding-right:6px; }
+.shortcut-page-scroll::-webkit-scrollbar { width:6px; }
+.shortcut-page-scroll::-webkit-scrollbar-thumb { border-radius:999px; background:rgba(140,150,170,.5); }
+.shortcut-page-scroll::-webkit-scrollbar-button { display:none; width:0; height:0; }
+.shortcut-group-title { margin:15px 0 6px; padding-top:9px; border-top:1px solid var(--glass-border-light,#ffffff20); font-size:12px; font-weight:600; color:var(--text-muted,#aab4c2); }
+.shortcut-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(88px,auto) auto; align-items:center; gap:7px; min-height:43px; border-bottom:1px solid var(--glass-border-light,#ffffff18); }
+.shortcut-action { min-width:0; font-size:12px; }
+.shortcut-key, .shortcut-reset { min-width:0; border:1px solid var(--glass-border,#ffffff35); border-radius:7px; background:rgba(128,128,128,.1); color:var(--text-main); padding:6px 8px; font:inherit; font-size:11px; cursor:pointer; white-space:nowrap; }
+.shortcut-key { text-align:center; }
+.shortcut-key:hover, .shortcut-reset:hover { border-color:var(--accent-primary,#8ac4ff); }
+.shortcut-key:focus-visible, .shortcut-reset:focus-visible { outline:2px solid var(--accent-primary,#8ac4ff); outline-offset:2px; }
+.shortcut-fixed { margin:14px 0 0; line-height:1.5; }
+#shortcut-feedback { flex:none; min-height:17px; font-size:11px; color:var(--text-muted,#aab4c2); }
+#shortcut-feedback.error { color:#ff9d9d; }
+
+body.ui-custom-colors #ambient-canvas { opacity:calc(1 - var(--desktop-reveal,0))!important; }
+.settings-category-title { margin:8px 0 0; padding:12px 0 2px; border-top:1px solid var(--glass-border-light, #ffffff20); font-size:14px; font-weight:600; color:var(--text-main); flex-shrink:0; }
+.settings-category-title:first-child { margin-top:0; border-top:0; padding-top:0; }
+#row-visualizer-intensity > .setting-desc { margin:0; line-height:1.4; }
+.library-restore-setting { flex-direction:column; align-items:stretch; gap:10px; }
+.library-restore-setting .setting-desc { line-height:1.55; }
+.library-restore-setting #btn-unhide-all { align-self:flex-start; }
+/* Wallpaper tint must not suppress ambient lighting when no wallpaper is active. */
+body:not(.custom-wallpaper-active):not(.mini-bar-mode) #ambient-canvas { visibility:visible!important; opacity:calc(1 - var(--desktop-reveal,0))!important; }
+
+html.window-animation-paused *, html.window-animation-paused *::before, html.window-animation-paused *::after { animation-play-state:paused!important; }
+/* The native shape and renderer share a 14 DIP radius in every window mode. */
+body #app-shell, body.window-glass-active #app-shell { border-radius:14px!important; overflow:hidden!important; }
+
+/* The transparent rounded edge is drawn once by the native window shape. */
+body #app-shell, body.window-glass-active #app-shell { border:0!important; outline:0!important; box-shadow:none!important; }

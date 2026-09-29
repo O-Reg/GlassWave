@@ -1,0 +1,14 @@
+const fs=require('fs'),path=require('path'),crypto=require('crypto');
+const {fileURLToPath}=require('url');
+const IMAGE_KEYS=new Set(['glasswave_custom_bg','customBg']);
+async function transform(value,fn,depth=0){if(depth>15)throw Error('预设层级过深');if(Array.isArray(value))return Promise.all(value.map(v=>transform(v,fn,depth+1)));if(value&&typeof value==='object'){const out={};for(const [k,v] of Object.entries(value)){if(['__proto__','constructor','prototype'].includes(k))continue;out[k]=IMAGE_KEYS.has(k)&&typeof v==='string'&&v?await fn(v):await transform(v,fn,depth+1);}return out;}return value;}
+async function pack(snapshot){const assets={};let bytes=0;const data=await transform(snapshot,async value=>{let buffer,ext;
+if(value.startsWith('data:')){const m=value.match(/^data:image\/(png|jpeg|webp|bmp);base64,([A-Za-z0-9+/=\r\n]+)$/);if(!m)throw Error('不支持的背景图片格式');buffer=Buffer.from(m[2],'base64');ext=m[1]==='jpeg'?'jpg':m[1];}
+else{const p=value.startsWith('file:')?fileURLToPath(value):value;ext=path.extname(p).slice(1).toLowerCase();if(!['jpg','jpeg','png','webp','bmp'].includes(ext))throw Error('背景图片格式不支持');const stat=await fs.promises.stat(p);if(stat.size>32*1024*1024)throw Error('单张背景图不能超过32MB');buffer=await fs.promises.readFile(p);}
+const id=crypto.createHash('sha256').update(buffer).digest('hex');if(!assets[id]){bytes+=buffer.length;if(bytes>64*1024*1024)throw Error('背景图片总大小不能超过64MB');assets[id]={ext,data:buffer.toString('base64')};}return 'skin-asset:'+id;});return {format:'GlassWaveSkin',version:1,createdAt:new Date().toISOString(),data,assets};}
+async function unpack(file,userData,nativeImage){if(file?.format!=='GlassWaveSkin'||file.version!==1||!file.data?.settings||typeof file.data.settings!=='object')throw Error('不是支持的GlassWave皮肤文件');const prepared=new Map();let bytes=0;for(const [id,a] of Object.entries(file.assets||{})){if(!/^[a-f0-9]{64}$/.test(id)||!['jpg','jpeg','png','webp','bmp'].includes(a.ext)||typeof a.data!=='string')throw Error('图片记录无效');const buf=Buffer.from(a.data,'base64');bytes+=buf.length;if(bytes>64*1024*1024||crypto.createHash('sha256').update(buf).digest('hex')!==id)throw Error('图片校验失败');if(nativeImage.createFromBuffer(buf).isEmpty())throw Error('图片无法解码');prepared.set(id,{buf,ext:a.ext});}
+// Validate references before extracting anything. Imported files cannot request arbitrary paths.
+await transform(file.data,async value=>{const id=value.replace(/^skin-asset:/,'');if(!value.startsWith('skin-asset:')||!prepared.has(id))throw Error('皮肤缺少内嵌图片');return value;});
+const dir=path.join(userData,'skin-assets');await fs.promises.mkdir(dir,{recursive:true});for(const [id,a] of prepared)await fs.promises.writeFile(path.join(dir,id+'.'+a.ext),a.buf);
+return transform(file.data,async value=>{const id=value.slice(11);return path.join(dir,id+'.'+prepared.get(id).ext);});}
+module.exports={pack,unpack};
