@@ -316,13 +316,31 @@
 }
 
 .track-row.playing {
-  background: rgba(138, 196, 255, 0.15) !important;
-  border-color: rgba(138, 196, 255, 0.38) !important;
+  background: rgba(56, 189, 248, 0.13) !important;
+  border-color: rgba(56, 189, 248, 0.6) !important;
 }
 
 .track-row.selected {
-  background: rgba(138, 196, 255, 0.2) !important;
-  border-color: rgba(138, 196, 255, 0.5) !important;
+  background: rgba(167, 139, 250, 0.2) !important;
+  border-color: rgba(167, 139, 250, 0.65) !important;
+}
+
+.track-row.playing.selected {
+  background: linear-gradient(90deg, rgba(56,189,248,.18), rgba(167,139,250,.25)) !important;
+  border-color: rgba(167,139,250,.7) !important;
+}
+
+.track-row.playing::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: #38bdf8;
+  box-shadow: 0 0 10px rgba(56,189,248,.65);
+  pointer-events: none;
 }
 
 /* While scrolling is active: disable transitions and hit-testing for 60-144fps lock */

@@ -9,7 +9,8 @@ body.ui-custom-colors { --accent-primary:var(--ui-accent);--accent-secondary:var
 body.ui-custom-colors #app-shell { background:rgba(var(--ui-background-rgb),calc(1 - var(--desktop-reveal,0)))!important; }
 body.ui-custom-colors .noise-overlay,body.ui-custom-colors .vignette-overlay { opacity:0!important; }
 body.ui-custom-colors :is(.glass-sidebar,.glass-player-bar,.glass-titlebar,.glass-settings-drawer,.glass-queue-drawer,.glass-eq-modal,.glass-modal-card,.glass-context-menu,.glass-confirm-card,.library-stage,.folders-stage) { --text-main:var(--ui-panel-ink);--text-primary:var(--text-main);color:var(--text-main)!important;background:rgba(var(--ui-panel-rgb),calc(1 - var(--window-glass-ratio,0)))!important;border-color:var(--ui-border)!important; }
-body.ui-custom-colors #view-settings,body.ui-custom-colors #view-visualizer-drawer { --text-main:var(--ui-panel-ink);--text-primary:var(--text-main);background:rgba(var(--ui-panel-rgb),calc(1 - var(--window-glass-ratio,0)))!important;color:var(--text-main)!important; }
+body.ui-custom-colors #view-settings { --text-main:var(--ui-panel-ink);--text-primary:var(--text-main);background:rgba(var(--ui-panel-rgb),calc(1 - var(--window-glass-ratio,0)))!important;color:var(--text-main)!important; }
+body.ui-custom-colors #view-visualizer-drawer { --window-glass-ratio:0;--text-main:var(--ui-panel-ink);--text-primary:var(--text-main);background:rgba(var(--ui-panel-rgb),.96)!important;color:var(--text-main)!important; }
 body.ui-custom-colors .glass-sidebar { --text-main:var(--ui-sidebar-ink);background:rgba(var(--ui-sidebar-rgb),calc(1 - var(--window-glass-ratio,0)))!important; }
 body.ui-custom-colors .glass-titlebar { --text-main:var(--ui-topbar-ink);background:rgba(var(--ui-topbar-rgb),calc(1 - var(--window-glass-ratio,0)))!important; }
 body.ui-custom-colors .glass-player-bar { --text-main:var(--ui-playerbar-ink);background:rgba(var(--ui-playerbar-rgb),calc(1 - var(--window-glass-ratio,0)))!important; }
@@ -18,6 +19,11 @@ body.ui-custom-colors :is(button,input,select) { color:var(--text-main); }
 body.ui-custom-colors :is(.glass-select,select option,.setting-item,.folder-card,.track-table-header,.search-input,.sidebar-bottom-panel) { background-color:rgba(var(--ui-panel-rgb),.92)!important;border-color:var(--ui-border)!important; }
 body.ui-custom-colors :is(.nav-item.active,.vis-tab.active,.vis-tune-tab.active,.track-row.selected,.track-row.playing,.queue-row.playing) { background:var(--ui-selection)!important;--text-main:var(--ui-selection-ink);--text-muted:var(--ui-selection-ink);color:var(--text-main)!important; }
 body.ui-custom-colors :is(.track-row.selected,.track-row.playing) * { color:var(--ui-selection-ink)!important; }
+body.ui-custom-colors .track-row.playing { background:rgba(var(--ui-accent-rgb),.16)!important;border-color:var(--ui-accent)!important; }
+body.ui-custom-colors .track-row.playing:not(.selected) * { color:var(--ui-panel-ink)!important; }
+body.ui-custom-colors .track-row.selected { background:var(--ui-selection)!important;border-color:var(--ui-border)!important; }
+body.ui-custom-colors .track-row.playing.selected { background:linear-gradient(90deg,rgba(var(--ui-accent-rgb),.24),var(--ui-selection))!important;border-color:var(--ui-accent)!important; }
+body.ui-custom-colors .track-row.playing::before { background:var(--ui-accent);box-shadow:0 0 9px var(--ui-accent); }
 body.ui-custom-colors .timeline-track::before { background:var(--ui-track)!important; }
 body.ui-custom-colors .timeline-progress { background:var(--ui-accent)!important;box-shadow:0 0 0 1px var(--ui-border)!important; }
 body.ui-custom-colors :is(.timeline-handle,.volume-fill,.volume-thumb) { background:var(--ui-accent)!important;outline:1px solid var(--ui-border); }

@@ -24,7 +24,7 @@ class LibraryDatabase {
     this.config = {
       autoplayOnLaunch: true,
       launchShuffle: false,
-      rememberProgress: true,
+      rememberProgress: false,
       mouseParallax: true,
       visualizerMode: 'wave',
       visualizerIntensity: 1.0,
@@ -113,6 +113,16 @@ class LibraryDatabase {
       }
     } catch (e) {
       console.warn('Failed to load database:', e);
+    }
+    // This release changes the startup default once; later user changes remain intact.
+    if (!this.config.rememberProgressDefaultOffApplied) {
+      this.config.rememberProgress = false;
+      this.config.rememberProgressDefaultOffApplied = true;
+      try {
+        const tempConf = `${this.configFile}.tmp`;
+        fs.writeFileSync(tempConf, JSON.stringify(this.config), 'utf8');
+        fs.renameSync(tempConf, this.configFile);
+      } catch (e) { console.warn('Could not save playback default:', e); }
     }
   }
 

@@ -21,6 +21,24 @@ function withDatabase(run) {
   }
 }
 
+test('playback progress defaults off once, then honors a later user choice', () => withDatabase((db, root) => {
+  assert.equal(db.config.rememberProgress, false);
+  db.config.rememberProgress = true;
+  db.save();
+  assert.equal(new LibraryDatabase(root).config.rememberProgress, true);
+}));
+
+test('an older saved startup default migrates to progress off', () => withDatabase((db, root) => {
+  const configPath = path.join(root, 'config.json');
+  const legacy = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  legacy.rememberProgress = true;
+  delete legacy.rememberProgressDefaultOffApplied;
+  fs.writeFileSync(configPath, JSON.stringify(legacy));
+  const migrated = new LibraryDatabase(root);
+  assert.equal(migrated.config.rememberProgress, false);
+  assert.equal(migrated.config.rememberProgressDefaultOffApplied, true);
+}));
+
 test('song-only tags disappear after the final song removes them; explicit tags remain', () => withDatabase(db => {
   db.upsertTrack({ path: 'C:\\music\\a.wav', title: 'Same', tags: [] });
   db.upsertTrack({ path: 'D:\\music\\a.wav', title: 'Same', tags: [] });

@@ -18,6 +18,39 @@ function makeUI() {
   return { ui, handlers, context };
 }
 
+test('background reset restores light orbs without changing visual mode or interface opacity', () => {
+  const { ui, context } = makeUI();
+  const values = new Map([
+    ['glasswave_custom_bg', 'C:\\art\\cover.png'],
+    ['glasswave_visualizer_mode_controls_v1', '{"wave":{"scale":1.8}}'],
+    ['glasswave_window_glass_ratio', '45'],
+    ['glasswave_desktop_reveal', '20']
+  ]);
+  context.localStorage = { removeItem: key => values.delete(key) };
+  context.window.GlassWaveTheme = { setBackground() {} };
+  const removedClasses = [];
+  context.document.body = { classList: { remove: (...names) => removedClasses.push(...names) } };
+  context.document.querySelector = () => null;
+  context.document.getElementById = id => id === 'custom-bg-layer'
+    ? { classList: { remove: () => {} } }
+    : id === 'custom-bg-image' ? { style: { backgroundImage: 'before' } } : null;
+  const calls = [];
+  ui.colorEngine = Object.fromEntries(['clearPureColor','setGlowEnabled','setGlowMode','setBlobCount','setSpeedMultiplier','setIntensityMultiplier']
+    .map(name => [name, (...args) => calls.push([name, ...args])]));
+  for (const name of ['bindAmbientGlowControls','updateWallpaperTintDegree','updateWallpaperPureRatio','updateWallpaperOpacity','updateWallpaperZoom','resetWallpaperFocusPosition','resetWallpaperRotation','updateWallpaperBlur','updateWallpaperLumaThreshold','showToast']) ui[name] = () => {};
+  ui.visualizerModeControls = { wave: { scale: 1.8 } };
+  ui.updateWindowGlassRatio = () => { throw new Error('interface opacity changed'); };
+  ui.updateDesktopReveal = () => { throw new Error('desktop reveal changed'); };
+  ui.applyVisualizerModeControls = () => { throw new Error('visual mode changed'); };
+  ui.resetCustomWallpaper();
+  assert.equal(values.has('glasswave_custom_bg'), false);
+  assert.equal(values.get('glasswave_window_glass_ratio'), '45');
+  assert.equal(values.get('glasswave_desktop_reveal'), '20');
+  assert.deepEqual(ui.visualizerModeControls, { wave: { scale: 1.8 } });
+  assert.ok(calls.some(call => call[0] === 'setBlobCount' && call[1] === 4));
+  assert.ok(removedClasses.includes('custom-wallpaper-active'));
+});
+
 test('single click anchors Shift range selection in any song list; double click plays', async () => {
   const { ui, handlers } = makeUI();
   const played = [];

@@ -6330,7 +6330,7 @@ class UIController {
           itemRememberProgress.style.opacity = '1';
           itemRememberProgress.style.pointerEvents = 'auto';
           const savedRemember = localStorage.getItem('glasswave_remember_progress');
-          settingRememberProgress.checked = savedRemember !== null ? savedRemember === 'true' : true;
+          settingRememberProgress.checked = savedRemember === 'true';
           if (descRememberProgress) {
             descRememberProgress.textContent = '关闭后，打开软件重新播放歌曲时将一律从 00:00 从头起播，不再恢复上次听了一半的秒数';
           }
@@ -6373,7 +6373,7 @@ class UIController {
           try { localStorage.setItem('glasswave_launch_shuffle', settingLaunchShuffle.checked ? 'true' : 'false'); } catch (e) {}
         }
         if (settingRememberProgress) {
-          const val = cfg.rememberProgress !== false;
+          const val = cfg.rememberProgress === true;
           try { localStorage.setItem('glasswave_remember_progress', val ? 'true' : 'false'); } catch (e) {}
         }
         updateLaunchSettingsLinkage();
@@ -6416,7 +6416,7 @@ class UIController {
         if (api) {
           api.saveConfig({
             launchShuffle: val,
-            rememberProgress: val ? false : (settingRememberProgress ? settingRememberProgress.checked : true)
+            rememberProgress: val ? false : (settingRememberProgress ? settingRememberProgress.checked : false)
           });
         }
       };
@@ -7616,7 +7616,6 @@ class UIController {
   }
 
   resetCustomWallpaper() {
-    this.updateDesktopReveal(0);
     this.colorEngine?.clearPureColor();
     this.colorEngine?.setGlowEnabled(true);
     this.colorEngine?.setGlowMode('multi');
@@ -7646,50 +7645,29 @@ class UIController {
     // 2. Fully restore Wallpaper Opacity to 100% (1.0 - 实体不透明)
     this.updateWallpaperOpacity(1.0);
 
-    // 3. Fully restore Global Window Glass Opacity to 0% (标准深邃, 重新呈现默认动态流光)
-    this.updateWindowGlassRatio(0);
-
-    // 4. Reset zoom, focus positions, rotation
+    // 3. Reset only wallpaper geometry; interface transparency is independent.
     this.updateWallpaperZoom(100, true);
     this.resetWallpaperFocusPosition();
     this.resetWallpaperRotation();
 
-    // 5. Reset blur to default (14px)
+    // Reset blur to default (14px)
     this.updateWallpaperBlur(14);
     const blurSlider = document.getElementById('setting-bg-blur');
     if (blurSlider) blurSlider.value = 14;
 
-    // 6. Reset pure color selection if active
+    // Reset pure color selection if active
     const activePure = document.querySelector('.pure-color-swatch.active');
     if (activePure) activePure.classList.remove('active');
 
-    // 7. Reset visualizer position & scale if modified
-    if (this.visualizer) {
-      this.visualizerModeControls = {};
-      this._visualizerModeControlsChanged = true;
-      clearTimeout(this._saveVisualizerModeControlsTimer);
-      try { localStorage.setItem('glasswave_visualizer_mode_controls_v1', '{}'); } catch (e) {}
-      window.glasswaveAPI?.saveConfig?.({ visualizerModeControls: {} });
-      this.applyVisualizerModeControls();
-    }
-
-    // 8. Reset background cutout to off and clear both saved thresholds.
+    // Reset background cutout to off and clear both saved thresholds.
     this.updateWallpaperLumaThreshold(0, 'cutout');
 
     try {
       localStorage.removeItem('glasswave_custom_bg');
-      localStorage.removeItem('glasswave_bg_pure_ratio');
-      localStorage.removeItem('glasswave_bg_tint_degree');
-      localStorage.removeItem('glasswave_bg_pure_mode');
       localStorage.removeItem('glasswave_bg_rotate');
       localStorage.removeItem('glasswave_bg_zoom');
-      localStorage.removeItem('glasswave_bg_opacity');
-      localStorage.removeItem('glasswave_window_glass_ratio');
       localStorage.removeItem('glasswave_bg_blur');
       localStorage.removeItem('glasswave_pure_color');
-      localStorage.removeItem('glasswave_vis_pos');
-      localStorage.removeItem('glasswave_vis_offset_y');
-      localStorage.removeItem('glasswave_vis_scale');
       localStorage.removeItem('glasswave_bg_luma_threshold');
       localStorage.removeItem('glasswave_bg_white_threshold');
       localStorage.removeItem('glasswave_bg_key_color');
@@ -7702,7 +7680,7 @@ class UIController {
     if (statusLabel) {
       statusLabel.textContent = '当前：默认流体光效';
     }
-    this.showToast('已重置并恢复默认视觉效果');
+    this.showToast('已恢复默认背景光球，视觉模式设置保持不变');
   }
 
   // =========================================================================

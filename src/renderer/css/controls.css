@@ -153,13 +153,19 @@ body #ambient-canvas,body.window-glass-active #ambient-canvas,body .noise-overla
 body.window-glass-active .glass-sidebar,body.window-glass-active .glass-player-bar,body.window-glass-active .glass-titlebar,
 body.window-glass-active .glass-settings-drawer,body.window-glass-active .glass-queue-drawer,body.window-glass-active #glass-eq-modal,
 body.window-glass-active .glass-modal,body.window-glass-active .glass-context-menu,
-body #view-settings,body #view-visualizer-drawer {
+body #view-settings {
  background:rgba(18,22,34,calc(1 - var(--window-glass-ratio,0)))!important;
 }
+body #view-visualizer-drawer {
+ --window-glass-ratio:0;
+ background:rgba(18,22,34,.96)!important;
+}
+body #view-visualizer-drawer.open { box-shadow:-8px 0 20px rgba(0,0,0,.25)!important; }
 
 body.window-glass-active .noise-overlay,body.window-glass-active .acrylic-noise-overlay,body.window-glass-active .vignette-overlay { opacity:calc(1 - var(--desktop-reveal))!important; }
 body.window-glass-active .glass-modal-card, body.window-glass-active .glass-eq-modal { background:rgba(18,22,34,calc(1 - var(--window-glass-ratio,0)))!important; }
 #view-visualizer-drawer #btn-close-vis-drawer { width:28px;height:28px;align-items:center;justify-content:center;border:0;border-radius:50%;background:rgba(255,255,255,.1);color:var(--text-primary,#fff);font-size:21px;cursor:pointer; }
+#vis-drawer-header > #btn-close-vis-drawer { flex:0 0 28px;order:-1; }
 .stable-slider-row > div > :first-child { white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
 /* Parameter rows own their layout; controls never share a grid cell. */
 .settings-content > *, .custom-bg-sliders-box > * { flex-shrink:0; }

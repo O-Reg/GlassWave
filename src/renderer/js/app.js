@@ -103,9 +103,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (localStorage.getItem('glasswave_launch_shuffle') === null && cfg.launchShuffle !== undefined) {
           localStorage.setItem('glasswave_launch_shuffle', !!cfg.launchShuffle ? 'true' : 'false');
         }
-        if (localStorage.getItem('glasswave_remember_progress') === null && cfg.rememberProgress !== undefined) {
-          localStorage.setItem('glasswave_remember_progress', cfg.rememberProgress !== false ? 'true' : 'false');
-        }
+        if (cfg.rememberProgress !== undefined) localStorage.setItem('glasswave_remember_progress', cfg.rememberProgress === true ? 'true' : 'false');
       }
     } catch (e) {}
 
@@ -203,7 +201,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Check settings for autoplay, launch shuffle, and remember progress
       let isAutoplay = true;
       let isLaunchShuffle = false;
-      let isRememberProgress = true;
+      let isRememberProgress = false;
 
       try {
         const localAutoplay = localStorage.getItem('glasswave_autoplay');

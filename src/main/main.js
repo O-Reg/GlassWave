@@ -61,6 +61,13 @@ let database = null;
 let parser = null;
 let scanner = null;
 let isQuitting = false;
+let quitInProgress = false;
+function quitGlassWave() {
+  isQuitting = true;
+  if (quitInProgress) return;
+  quitInProgress = true;
+  app.quit();
+}
 
 function setupLibrarySystem() {
   const userDataPath = app.getPath('userData');
@@ -143,10 +150,7 @@ function createTray() {
     { type: 'separator' },
     {
       label: '退出 GlassWave',
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      }
+      click: quitGlassWave
     }
   ]);
 
@@ -245,6 +249,9 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // A hidden resize-preview window may still exist, so closing the main
+    // window must terminate the application explicitly.
+    if (isQuitting) quitGlassWave();
   });
 
   // Multi-monitor reliable maximize & restore state tracking
@@ -358,7 +365,7 @@ function createWindow() {
   });
 
   ipcMain.on('window-close', () => {
-    if (mainWindow) mainWindow.close();
+    quitGlassWave();
   });
 
   ipcMain.on('window-toggle-fullscreen', () => {
@@ -1156,8 +1163,9 @@ app.whenReady().then(() => {
 app.on('will-quit', () => {
   scanner?.close();
   globalShortcut.unregisterAll();
+  if (tray) { try { tray.destroy(); } catch (e) {} tray = null; }
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin' && isQuitting) app.quit();
+  if (process.platform !== 'darwin' && isQuitting) quitGlassWave();
 });
