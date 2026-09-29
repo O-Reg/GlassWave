@@ -6355,7 +6355,7 @@ class UIController {
     // Immediate local persistence restore
     try {
       const savedCompact = localStorage.getItem('glasswave_compact_sidebar_nav');
-      if (savedCompact === 'true') {
+      if (savedCompact !== 'false') {
         document.body.classList.add('compact-sidebar-nav');
         document.documentElement.classList.add('compact-sidebar-nav');
         if (settingCompactNav) settingCompactNav.checked = true;

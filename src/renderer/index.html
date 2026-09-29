@@ -8,7 +8,7 @@
   <script>
     (function() {
       try {
-        if (localStorage.getItem('glasswave_compact_sidebar_nav') === 'true') {
+        if (localStorage.getItem('glasswave_compact_sidebar_nav') !== 'false') {
           document.documentElement.classList.add('compact-sidebar-nav');
         }
         const savedGlassRatio = localStorage.getItem('glasswave_window_glass_ratio');
