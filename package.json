@@ -1,6 +1,6 @@
 {
   "name": "glasswave",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "A high-quality, lightweight, visually gorgeous Windows local music player.",
   "main": "src/main/main.js",
   "scripts": {
