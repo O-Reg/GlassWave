@@ -2114,7 +2114,7 @@ class UIController {
       }
 
       // 3. Zen Mode sidebar dismiss when clicking on main stage
-      if (document.body.classList.contains('zen-mode') && document.body.classList.contains('zen-show-sidebar')) {
+      if (document.body.classList.contains('zen-mode') && this.currentView === 'player' && document.body.classList.contains('zen-show-sidebar')) {
         const sidebar = document.getElementById('sidebar');
         if (sidebar && !sidebar.contains(e.target) && !e.target.closest('.category-icon-picker, #category-context-menu')) {
           document.body.classList.remove('zen-show-sidebar');
@@ -5733,6 +5733,20 @@ class UIController {
     }
   }
 
+  canDragWindowFromTarget(target) {
+    if (!target || typeof target.closest !== 'function' || !target.closest('#app-shell')) return false;
+    return !target.closest([
+      '#titlebar', 'button', 'input', 'select', 'textarea', 'label', 'a', '[role="button"]', '[contenteditable="true"]',
+      '.glass-sidebar', '.glass-player-bar', '.zen-floating-toggle', '.glass-queue-drawer', '.glass-eq-modal',
+      '.glass-settings-drawer', '#view-settings', '#view-visualizer-drawer', '.category-icon-picker',
+      '#category-context-menu', '#glass-context-menu', '.glass-confirm-dialog', '.glass-modal',
+      '.track-row', '.track-table', '.folder-card', '.folder-item', '.track-meta',
+      '.alphabet-index-bar', '.custom-overlay-scrollbar-track', '.sort-dropdown-menu', '.sort-menu-item',
+      '.tag-pill', '.tag-chip', '.pop-tag-chip', '.category-item', '.category-group-heading',
+      '.lyrics-scroll-container', '.volume-slider-wrap', '.window-resize-handle', '.hifi-badge-wrap'
+    ].join(', '));
+  }
+
   bindZenMode() {
     const btnZenMode = document.getElementById('btn-zen-mode');
     const btnZenFloatExit = document.getElementById('btn-zen-float-exit');
@@ -5917,18 +5931,14 @@ class UIController {
     let dragPointer=null,dragElement=null;
 
     window.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return; // Only left click
-      // Ignore interactive controls, drawers, modals, context menus, and content stages
-      if (e.target.closest('button, input, select, textarea, label, a, .ctrl-btn, .win-btn, .nav-item, .glass-player-bar, .glass-sidebar, .zen-floating-toggle, .glass-queue-drawer, .glass-eq-modal, .category-icon-picker, #category-context-menu, #glass-context-menu, #view-visualizer-drawer, #view-settings, .settings-stage, #view-folders, .folders-stage, #view-library, .library-stage, .track-table, .track-row, .folder-card, .lyrics-scroll-container, .volume-slider-wrap, input[type="range"]')) {
-        return;
-      }
+      if (e.button !== 0 || !this.canDragWindowFromTarget(e.target)) return;
 
       // Never drag window when maximized or fullscreen
       if (document.body.classList.contains('window-fullscreen') || document.body.classList.contains('is-maximized')) {
         return;
       }
 
-      // Scheme 1A: In Zen Mode, clicking on main stage background / cover closes right menu / returns to player view
+      // Dismiss floating overlays without changing the current page when a background drag starts.
       if (document.body.classList.contains('zen-mode')) {
         const queueDrawer = document.getElementById('glass-queue-drawer');
         if (queueDrawer && queueDrawer.classList.contains('open')) {
@@ -5944,12 +5954,6 @@ class UIController {
           eqModal.style.display = 'none';
           document.body.classList.remove('zen-interactive-open');
         }
-
-        if (this.currentView !== 'player' && !document.querySelector('#view-settings.open, #view-visualizer-drawer.open')) {
-          if (!e.target.closest('.track-row, .folder-item, .setting-item, #view-settings, .settings-stage, #view-folders, .folders-stage, #view-library, .library-stage')) {
-            this.switchView('player');
-          }
-        }
       }
 
       isDraggingWindow = true;
@@ -5957,6 +5961,7 @@ class UIController {
       try{dragElement.setPointerCapture(dragPointer);}catch{}
       this.visualizer?.setInteractionQuality?.(true);
       this.beginDirectInteraction?.();
+      if (document.body.classList.contains('zen-mode')) document.body.classList.add('zen-dragging-window');
       hasMovedWindow = false;
       dragStartX = e.screenX;
       dragStartY = e.screenY;

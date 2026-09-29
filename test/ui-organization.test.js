@@ -142,3 +142,66 @@ test('entering a Zen library page measures its full-width start before pushing c
   assert.equal(measuredAtStart, true);
   assert.equal(classes.has('zen-content-view'), true);
 });
+
+test('blank library background starts a window drag without leaving the library', () => {
+  const { ui, context } = makeUI();
+  const events = {};
+  const classes = new Set(['zen-mode', 'zen-content-view']);
+  const moves = [];
+  context.window.addEventListener = (name, handler) => { events[name] = handler; };
+  context.window.glasswaveAPI = {
+    dragStartWindow: coords => moves.push(['start', coords.screenX, coords.screenY]),
+    dragEndWindow: () => moves.push(['end'])
+  };
+  context.document.body = { classList: {
+    contains: value => classes.has(value),
+    add: (...values) => values.forEach(value => classes.add(value)),
+    remove: (...values) => values.forEach(value => classes.delete(value))
+  } };
+  context.document.getElementById = () => null;
+  ui.currentView = 'library';
+  ui.switchView = () => { throw Error('background drag must not return to player'); };
+  const background = {
+    closest: selector => selector === '#app-shell' ? {} : null,
+    setPointerCapture() {}, hasPointerCapture: () => false
+  };
+  ui.bindZenMode();
+  events.pointerdown({ button: 0, pointerId: 3, target: background, screenX: 340, screenY: 170 });
+  assert.deepEqual(moves, [['start', 340, 170]]);
+  assert.equal(classes.has('zen-dragging-window'), true);
+  events.pointerup();
+  assert.deepEqual(moves.at(-1), ['end']);
+  assert.equal(classes.has('zen-dragging-window'), false);
+  const song = { closest: selector => selector === '#app-shell' || selector.includes('.track-row') ? {} : null };
+  events.pointerdown({ button: 0, target: song, screenX: 340, screenY: 170 });
+  assert.equal(moves.length, 2);
+  const settingsPanel = { closest: selector => selector === '#app-shell' || selector.includes('.glass-settings-drawer') ? {} : null };
+  events.pointerdown({ button: 0, target: settingsPanel, screenX: 340, screenY: 170 });
+  assert.equal(moves.length, 2);
+  classes.delete('zen-mode');
+  events.pointerdown({ button: 0, pointerId: 4, target: background, screenX: 450, screenY: 200 });
+  assert.deepEqual(moves.at(-1), ['start', 450, 200]);
+  assert.equal(classes.has('zen-dragging-window'), false);
+  events.pointerup();
+  assert.deepEqual(moves.at(-1), ['end']);
+});
+
+test('Zen content pages keep their pinned sidebar when the background is pressed', () => {
+  const { ui, context } = makeUI();
+  const classes = new Set(['zen-mode', 'zen-show-sidebar']);
+  let pointerdown;
+  context.document.body = { classList: {
+    contains: value => classes.has(value),
+    remove: value => classes.delete(value)
+  } };
+  context.document.getElementById = id => id === 'sidebar' ? { contains: () => false } : null;
+  context.document.addEventListener = (name, handler) => { if (name === 'pointerdown') pointerdown = handler; };
+  ui.bindQueueDrawer();
+  const event = { target: { closest: () => null } };
+  ui.currentView = 'library';
+  pointerdown(event);
+  assert.equal(classes.has('zen-show-sidebar'), true);
+  ui.currentView = 'player';
+  pointerdown(event);
+  assert.equal(classes.has('zen-show-sidebar'), false);
+});
