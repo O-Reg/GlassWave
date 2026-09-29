@@ -302,7 +302,6 @@ class Visualizer {
         this.dpr = Math.min(this.dpr, Math.sqrt((budgets[q] || budgets.balanced) / (rect.width * rect.height)));
       }
 
-      if(this._interactionQuality) this.dpr=Math.min(this.dpr,Math.sqrt(900000/(rect.width*rect.height)));
       const targetW = Math.floor(rect.width * this.dpr);
       const targetH = Math.floor(rect.height * this.dpr);
       if (this.canvas.width !== targetW || this.canvas.height !== targetH) {
@@ -760,12 +759,6 @@ class Visualizer {
     const i1 = Math.min(len - 1, i0 + 1);
     const frac = idxFloat - i0;
     return this.audioProcessor.processedFreqs[i0] * (1 - frac) + this.audioProcessor.processedFreqs[i1] * frac;
-  }
-
-  setInteractionQuality(active) {
-    clearTimeout(this._interactionRestore);
-    if(active) {this._interactionQuality=true;this.performSyncResize();}
-    else this._interactionRestore=setTimeout(()=>{this._interactionQuality=false;this.performSyncResize();},100);
   }
 
   render() {

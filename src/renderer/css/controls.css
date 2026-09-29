@@ -194,7 +194,7 @@ body .glass-settings-drawer.open { box-shadow:-8px 0 20px rgba(0,0,0,.25)!import
 body .glass-stage,body .player-stage,body #parallax-deck,body #app-shell { transition:none!important; }
 body .settings-content .setting-item,body input[type=range],body input[type=range]::-webkit-slider-thumb { transition:none!important; }
 body.direct-interaction *,body.direct-interaction *::before,body.direct-interaction *::after {
- transition:none!important;animation-play-state:paused!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+ transition:none!important;animation-play-state:paused!important;
 }
 body .glass-confirm-backdrop { backdrop-filter:none!important;-webkit-backdrop-filter:none!important;transition:opacity 100ms linear,visibility 100ms linear; }
 .settings-content .parameter-row > input[type=range] { background:transparent!important; }

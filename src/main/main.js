@@ -60,6 +60,8 @@ let tray = null;
 let database = null;
 let parser = null;
 let scanner = null;
+let libraryWatchFolders = [];
+let libraryMonitoringScheduled = false;
 let isQuitting = false;
 let quitInProgress = false;
 function quitGlassWave() {
@@ -82,8 +84,7 @@ function setupLibrarySystem() {
 
   const featuredDir = path.dirname(featuredTrackPath());
   if (fs.existsSync(featuredTrackPath())) {
-    scanner.watchFolder(featuredDir);
-    scanner.scanDirectory(featuredDir);
+    libraryWatchFolders.push(featuredDir);
   }
 
   // Default GlassWave Library folder in User's Music folder
@@ -94,21 +95,33 @@ function setupLibrarySystem() {
     } catch (e) {}
   }
 
-  // Watch and scan default folder
+  // Load saved tracks first; begin directory monitoring after the window appears.
   if (!database.config.defaultFolderDisabled) {
     database.folders.add(defaultMusicFolder);
-    scanner.watchFolder(defaultMusicFolder);
-    scanner.scanDirectory(defaultMusicFolder);
+    libraryWatchFolders.push(defaultMusicFolder);
   }
 
   // Watch and scan any saved custom folders
   database.config.customFolders.forEach(folder => {
     {
       database.folders.add(folder);
-      scanner.watchFolder(folder);
-      scanner.scanDirectory(folder);
+      libraryWatchFolders.push(folder);
     }
   });
+}
+
+function scheduleLibraryMonitoring() {
+  if (libraryMonitoringScheduled) return;
+  libraryMonitoringScheduled = true;
+  // Chokidar scans each folder on ready. Starting it after first paint avoids
+  // competing with renderer initialization and avoids a duplicate startup scan.
+  setTimeout(() => {
+    for (const folder of new Set(libraryWatchFolders)) {
+      if (isQuitting) break;
+      scanner?.watchFolder(folder);
+    }
+    libraryWatchFolders = [];
+  }, 350);
 }
 
 function createTray() {
@@ -224,6 +237,7 @@ function createWindow() {
       mainWindow.show();
       mainWindow.focus();
       log('Main window displayed and focused.');
+      scheduleLibraryMonitoring();
     }
   };
 

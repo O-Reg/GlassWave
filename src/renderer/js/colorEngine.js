@@ -203,9 +203,15 @@ class ColorEngine {
       this.width = window.innerWidth;this.height = window.innerHeight;
       // Ambient light is intentionally soft; keep its raster independent of 4K size.
       const scale=Math.min(1,960/this.width,540/this.height);
-      this.canvas.width=Math.max(1,Math.round(this.width*scale));
-      this.canvas.height=Math.max(1,Math.round(this.height*scale));
+      const nextWidth=Math.max(1,Math.round(this.width*scale));
+      const nextHeight=Math.max(1,Math.round(this.height*scale));
+      const changed=this.canvas.width!==nextWidth || this.canvas.height!==nextHeight;
+      if(changed){
+        this.canvas.width=nextWidth;
+        this.canvas.height=nextHeight;
+      }
       this.ctx.setTransform(this.canvas.width/this.width,0,0,this.canvas.height/this.height,0,0);
+      if(changed) this.drawFluidMesh();
     };
     let resizeTimer = null;
     const debouncedResize = () => {
@@ -343,9 +349,12 @@ class ColorEngine {
 
   startRenderLoop() {
     const render = () => {
+      if(document.body.classList.contains('direct-interaction')) {
+        requestAnimationFrame(render);
+        return;
+      }
       this.updateColors();
-      if(!document.body.classList.contains('direct-interaction') &&
-         !document.body.classList.contains('mini-bar-mode') &&
+      if(!document.body.classList.contains('mini-bar-mode') &&
          Number(document.documentElement.style.getPropertyValue('--desktop-reveal'))<1) this.drawFluidMesh();
       requestAnimationFrame(render);
     };

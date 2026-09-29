@@ -5968,8 +5968,6 @@ class UIController {
       isDraggingWindow = true;
       dragPointer=e.pointerId;dragElement=e.target;
       try{dragElement.setPointerCapture(dragPointer);}catch{}
-      this.visualizer?.setInteractionQuality?.(true);
-      this.beginDirectInteraction?.();
       if (document.body.classList.contains('zen-mode')) document.body.classList.add('zen-dragging-window');
       hasMovedWindow = false;
       dragStartX = e.screenX;
@@ -5984,8 +5982,6 @@ class UIController {
         isDraggingWindow = false;
         try{if(dragElement?.hasPointerCapture(dragPointer))dragElement.releasePointerCapture(dragPointer);}catch{}
         dragElement=null;dragPointer=null;
-        this.visualizer?.setInteractionQuality?.(false);
-        this.endDirectInteraction?.();
         document.body.classList.remove('zen-dragging-window');
         if (window.glasswaveAPI && window.glasswaveAPI.dragEndWindow) {
           window.glasswaveAPI.dragEndWindow();
