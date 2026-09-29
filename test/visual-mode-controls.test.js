@@ -35,9 +35,9 @@ test('visual sensitivity and placement survive switching modes without leaking t
 
   ui.saveVisualizerModeControls({ intensity: 1.8, position: 'behind', offsetY: 45, scale: 1.8 });
   ui.switchVisualizerMode('bars');
-  assert.equal(ui.visualizer.intensity, 1);
+  assert.equal(ui.visualizer.intensity, 1.4);
   assert.equal(ui.visualizer.positionPreset, 'below');
-  assert.equal(ui.visualizer.offsetY, 0);
+  assert.equal(ui.visualizer.offsetY, 80);
   ui.saveVisualizerModeControls({ intensity: 0.6, position: 'center', offsetY: -30, scale: 0.8 });
   ui.switchVisualizerMode('wave');
   assert.deepEqual([ui.visualizer.intensity, ui.visualizer.positionPreset, ui.visualizer.offsetY, ui.visualizer.visScale], [1.8, 'behind', 45, 1.8]);

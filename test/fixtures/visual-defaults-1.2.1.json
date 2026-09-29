@@ -1,0 +1,208 @@
+{
+  "glasswave_visual_tuning": {
+    "reactive": {
+      "layout": "ribbon",
+      "edgeStability": 0.85,
+      "curveSmooth": 0.2,
+      "separation": 0.55,
+      "flowSeparation": 0,
+      "driftSpeed": 1,
+      "driftDirection": "right",
+      "idleMotion": 0.18,
+      "density": 8,
+      "response": 0.95,
+      "gain": 2.5,
+      "detail": 0.8,
+      "divergence": 0.45,
+      "strength": 1.2,
+      "smoothing": 0.35,
+      "lineWidth": 3,
+      "musicMix": 0.85,
+      "glow": 0.8,
+      "spread": 0.7
+    },
+    "curtain": {
+      "strength": 1.5,
+      "width": 0.32,
+      "speed": 1
+    },
+    "palette": "solid",
+    "solidColor": "#ffffff",
+    "modeColors": {
+      "wave": {
+        "palette": "original",
+        "solidColor": "#ffffff"
+      },
+      "spectrum": {
+        "palette": "original",
+        "solidColor": "#ffffff"
+      },
+      "sphere": {
+        "palette": "original",
+        "solidColor": "#ffffff"
+      },
+      "bars": {
+        "palette": "original",
+        "solidColor": "#ffffff"
+      },
+      "orb": {
+        "palette": "original",
+        "solidColor": "#fbbf24"
+      },
+      "ambient": {
+        "palette": "original",
+        "solidColor": "#ffffff"
+      },
+      "reactive": {
+        "palette": "original",
+        "solidColor": "#ffffff"
+      },
+      "curtain": {
+        "palette": "original",
+        "solidColor": "#ffffff"
+      }
+    },
+    "hueShift": 0,
+    "quality": "balanced",
+    "targetFps": 90,
+    "audioResponse": {
+      "smoothFactor": 0.7,
+      "attackMs": 35,
+      "releaseMs": 300,
+      "compression": 0.45,
+      "bassScale": 1,
+      "midScale": 1,
+      "highScale": 1,
+      "distribution": "log",
+      "peakSoftening": "soft"
+    },
+    "wave": {
+      "style": "ribbon",
+      "edgeStability": 0.8,
+      "curveSmooth": 0.6,
+      "separation": 1.2,
+      "flowSeparation": 0.5,
+      "driftSpeed": 1,
+      "driftDirection": "right",
+      "idleMotion": 0.18,
+      "density": 8,
+      "response": 0.6,
+      "gain": 2.5,
+      "detail": 0.8,
+      "divergence": 0.45,
+      "musicMix": 0.85,
+    "lineWidth": 8,
+      "amplitude": 1.8,
+      "glowBlur": 18,
+      "companionAlpha": 0.8,
+      "perspectivePitch": 35,
+      "yaw": -12,
+      "tilt": 8,
+      "lineCount": 4,
+      "smoothing": 0.7,
+      "depthLength": 1.2,
+      "farFade": 0.7,
+      "nearLineWidth": 1.4,
+      "horizontalSpan": 1.2,
+      "flowSpeed": 1,
+      "antiMoire": true,
+      "moireDamping": 0.75
+    },
+    "spectrum": {
+      "innerRadiusRatio": 1,
+      "barLengthRatio": 0.5,
+      "barWidth": 4.2,
+      "barCount": 64,
+      "rotAngle": 180,
+      "smoothFactor": 0.6,
+      "radialCompression": 0.6,
+      "symmetry": "2x",
+      "taper": 0
+    },
+    "sphere": {
+      "radiusRatio": 1.1,
+      "rotSpeed": 1,
+      "coreGlow": 0.8,
+      "nodeSize": 1.2,
+      "symmetry": "2x",
+      "rotAngle": 0,
+      "bassDiffusion": 0.35,
+      "sphereSmoothing": 0.6,
+      "backAlpha": 0.45,
+      "depthRatio": 0.6,
+      "idleLight": 0.4,
+      "lightSensitivity": 6,
+      "lightDecay": 120
+    },
+    "bars": {
+      "barWidthRatio": 0.8,
+      "heightRatio": 0.7,
+      "reflectionAlpha": 0.35,
+      "peakHold": false,
+      "freqOrder": "center_bass",
+      "barCount": 72,
+      "barGap": 0.35,
+      "cornerRadius": 1,
+      "peakHoldMs": 100,
+      "peakDecaySpeed": 1,
+      "reflectionSoftness": 0.55
+    },
+    "orb": {
+      "particleCount": 160,
+      "speed": 1,
+      "size": 1,
+      "depthRatio": 0.85,
+      "horizonRatio": 0.5,
+      "perspectiveSpread": 1.25,
+      "viewDirection": 0,
+      "fieldRotation": 0,
+      "fgBlur": 0.3,
+      "farAlpha": 0.45,
+      "musicInfluence": 1,
+      "bassThrust": 0.8,
+      "turbulence": 0.2
+    },
+    "ambient": {
+      "ribbonCount": 32,
+      "speed": 1,
+      "trailLength": 1,
+      "ribbonWidth": 1,
+      "curvature": 0.5,
+      "turbulence": 0.25,
+      "direction": 15,
+      "spreadAngle": 35,
+      "depthRatio": 0.5,
+      "glowIntensity": 0.8,
+      "fadeSpeed": 1,
+      "musicInfluence": 1,
+      "inertia": 0.65,
+      "enableOrbs": false
+    }
+  },
+  "glasswave_visualizer_mode_controls_v1": {
+    "orb": {
+      "intensity": 1,
+      "position": "center",
+      "offsetY": 0,
+      "scale": 1.25
+    },
+    "bars": {
+      "intensity": 1.4,
+      "position": "below",
+      "offsetY": 80,
+      "scale": 2
+    },
+    "spectrum": {
+      "intensity": 1,
+      "position": "behind",
+      "offsetY": 0,
+      "scale": 1.35
+    },
+    "wave": {
+      "intensity": 1,
+      "position": "center",
+      "offsetY": 60,
+      "scale": 1.4
+    }
+  }
+}

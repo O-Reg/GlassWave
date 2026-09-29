@@ -18,6 +18,35 @@ function makeUI() {
   return { ui, handlers, context };
 }
 
+test('opening visual settings in Zen mode keeps the bottom dock visible', () => {
+  const { ui, context } = makeUI();
+  const classes = initial => {
+    const names = new Set(initial);
+    return {
+      contains: name => names.has(name),
+      add: (...items) => items.forEach(item => names.add(item)),
+      remove: (...items) => items.forEach(item => names.delete(item)),
+      toggle: (name, active) => active ? names.add(name) : names.delete(name)
+    };
+  };
+  const drawer = { classList: classes([]), style: { display: 'none' } };
+  const body = { classList: classes(['zen-mode']) };
+  context.document.body = body;
+  context.document.getElementById = id => id === 'view-visualizer-drawer' ? drawer : null;
+  ui.normalizeParameterRows = () => {};
+  ui.selectVisualizerTuneMode = () => {};
+  ui.syncVisualizerCustomizationUI = () => {};
+  ui.syncVisualizerTuningUI = () => {};
+  ui.visualizer = { mode: 'wave' };
+  let canceled = false;
+  ui.cancelZenAutoHide = () => { canceled = true; };
+  ui.toggleVisualizerDrawer(true);
+  assert.equal(drawer.classList.contains('open'), true);
+  assert.equal(body.classList.contains('zen-interactive-open'), true);
+  assert.equal(body.classList.contains('zen-show-player-bar'), true);
+  assert.equal(canceled, true);
+});
+
 test('background reset restores light orbs without changing visual mode or interface opacity', () => {
   const { ui, context } = makeUI();
   const values = new Map([

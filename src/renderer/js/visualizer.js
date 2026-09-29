@@ -147,9 +147,9 @@ class Visualizer {
     this.defaultTuning = {
       reactive: { layout: 'ribbon', edgeStability: .85, curveSmooth: .2, separation: .55, flowSeparation: 0, driftSpeed: 1, driftDirection: 'right', idleMotion: .18, density: 8, response: .95, gain: 2.5, detail: .8, divergence: .45, strength: 1.2, smoothing: .35, lineWidth: 3, musicMix: .85, glow: .8, spread: .7 },
       curtain: { strength: 1.5, width: .32, speed: 1 },
-      palette: 'original',
-      solidColor: '#38bdf8',
-      modeColors: Object.fromEntries(['wave','spectrum','sphere','bars','orb','ambient','reactive','curtain'].map(mode => [mode, { palette: 'original', solidColor: '#38bdf8' }])),
+      palette: 'solid',
+      solidColor: '#ffffff',
+      modeColors: Object.fromEntries(['wave','spectrum','sphere','bars','orb','ambient','reactive','curtain'].map(mode => [mode, { palette: 'original', solidColor: mode === 'orb' ? '#fbbf24' : '#ffffff' }])),
       hueShift: 0,
       quality: 'balanced', // 'low' | 'balanced' | 'high' | 'ultra'
       targetFps: 90, // Menu offers 60 or 90; legacy "unlimited" uses the 90 FPS clock.
@@ -165,9 +165,9 @@ class Visualizer {
         peakSoftening: 'soft' // 'off' | 'soft' | 'medium' | 'heavy'
       },
       wave: {
-        style: 'ribbon', edgeStability: .85, curveSmooth: .2, separation: .55, flowSeparation: 0, driftSpeed: 1, driftDirection: 'right', idleMotion: .18, density: 8, response: .95, gain: 2.5, detail: .8, divergence: .45, musicMix: .85,
-        lineWidth: 4.2,
-        amplitude: 1.0,
+        style: 'ribbon', edgeStability: .8, curveSmooth: .6, separation: 1.2, flowSeparation: .5, driftSpeed: 1, driftDirection: 'right', idleMotion: .18, density: 8, response: .6, gain: 2.5, detail: .8, divergence: .45, musicMix: .85,
+        lineWidth: 8,
+        amplitude: 1.8,
         glowBlur: 18,
         companionAlpha: 0.8,
         perspectivePitch: 35,
@@ -185,39 +185,42 @@ class Visualizer {
       },
       spectrum: {
         innerRadiusRatio: 1.0,
-        barLengthRatio: 1.0,
-        barWidth: 2.4,
+        barLengthRatio: 0.5,
+        barWidth: 4.2,
         barCount: 64,
-        rotAngle: 0,
+        rotAngle: 180,
         smoothFactor: 0.60,
-        radialCompression: 0.35,
-        symmetry: 'none', // 'none' | '2x' | '4x' | '8x'
-        taper: 0.20
+        radialCompression: 0.6,
+        symmetry: '2x', // 'none' | '2x' | '4x' | '8x'
+        taper: 0
       },
       sphere: {
-        radiusRatio: 1.0,
+        radiusRatio: 1.1,
         rotSpeed: 1.0,
-        coreGlow: 0.7,
-        nodeSize: 1.0,
+        coreGlow: 0.8,
+        nodeSize: 1.2,
         symmetry: '2x', // 2重对称 by default!
         rotAngle: 0,
         bassDiffusion: 0.35,
         sphereSmoothing: 0.60,
         backAlpha: 0.45,
-        depthRatio: 0.60
+        depthRatio: 0.60,
+        idleLight: 0.4,
+        lightSensitivity: 6,
+        lightDecay: 120
       },
       bars: {
-        barWidthRatio: 0.65,
-        heightRatio: 1.0,
-        reflectionAlpha: 0.25,
-        peakHold: true,
-        freqOrder: 'asc', // 'asc' | 'desc' | 'center_bass' | 'center_treble' | 'mirror'
-        barCount: 64,
+        barWidthRatio: 0.8,
+        heightRatio: 0.7,
+        reflectionAlpha: 0.35,
+        peakHold: false,
+        freqOrder: 'center_bass', // 'asc' | 'desc' | 'center_bass' | 'center_treble' | 'mirror'
+        barCount: 72,
         barGap: 0.35,
-        cornerRadius: 0.50,
-        peakHoldMs: 300,
+        cornerRadius: 1,
+        peakHoldMs: 100,
         peakDecaySpeed: 1.0,
-        reflectionSoftness: 0.40
+        reflectionSoftness: 0.55
       },
       orb: {
         particleCount: 160,

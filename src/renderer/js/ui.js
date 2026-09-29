@@ -315,13 +315,26 @@ class UIController {
     if (label) label.textContent = `${amount.toFixed(1)}×`;
   }
 
-  getVisualizerModeControls(mode = this.visualizer?.mode) {
-    const defaults = {
+  getDefaultVisualizerModeControls(mode = this.visualizer?.mode) {
+    // Baseline captured from the tuned 1.2.1 preview. Other modes retain their
+    // existing center placement and standard sensitivity/scale.
+    const previewDefaults = {
+      wave: { intensity: 1, position: 'center', offsetY: 60, scale: 1.4 },
+      spectrum: { intensity: 1, position: 'behind', offsetY: 0, scale: 1.35 },
+      bars: { intensity: 1.4, position: 'below', offsetY: 80, scale: 2 },
+      orb: { intensity: 1, position: 'center', offsetY: 0, scale: 1.25 }
+    };
+    return {
       intensity: 1,
       position: this.visualizer?.getDefaultPositionForMode(mode) || 'center',
       offsetY: 0,
-      scale: 1.25
+      scale: 1.25,
+      ...previewDefaults[mode]
     };
+  }
+
+  getVisualizerModeControls(mode = this.visualizer?.mode) {
+    const defaults = this.getDefaultVisualizerModeControls(mode);
     const saved = this.visualizerModeControls?.[mode] || {};
     const clamp = (value, fallback, min, max) => {
       const number = Number(value);
@@ -461,7 +474,8 @@ class UIController {
       if (this.syncVisualizerTuningUI) this.syncVisualizerTuningUI();
 
       if (document.body.classList.contains('zen-mode')) {
-        document.body.classList.add('zen-interactive-open');
+        this.cancelZenAutoHide?.();
+        document.body.classList.add('zen-interactive-open', 'zen-show-player-bar');
       }
     } else {
       drawer.classList.remove('open');
@@ -5856,7 +5870,11 @@ class UIController {
         // Active interaction locks: dragging seeker, dragging volume, dragging scrollbar, focus-within
         const isFocusInsidePlayerBar = playerBarEl && playerBarEl.matches(':focus-within');
         const isDraggingBottom = this.isDraggingTimeline || this.isDraggingVolume || this.isDraggingScrollbar;
-        const isInteractiveActive = isDrawerOpen || isEqOpen || isDraggingBottom || isFocusInsidePlayerBar;
+        const visualDrawer = document.getElementById('view-visualizer-drawer');
+        const settingsDrawer = document.getElementById('view-settings');
+        const isVisualOpen = visualDrawer?.classList.contains('open');
+        const isSettingsOpen = settingsDrawer?.classList.contains('open');
+        const isInteractiveActive = isDrawerOpen || isEqOpen || isVisualOpen || isSettingsOpen || isDraggingBottom || isFocusInsidePlayerBar;
         document.body.classList.toggle('zen-interactive-open', isInteractiveActive);
 
         // Super-wide trigger zone: 220px minimum or 28% of window height (over 2.5x the player bar height)
@@ -8094,7 +8112,7 @@ class UIController {
         };
         this.visualizer.resetModeTuning(activeTuneMode);
         if (activeTuneMode !== 'audio') {
-          this.saveVisualizerModeControls({ intensity: 1, position: this.visualizer.getDefaultPositionForMode(activeTuneMode), offsetY: 0, scale: 1.25 }, activeTuneMode);
+          this.saveVisualizerModeControls(this.getDefaultVisualizerModeControls(activeTuneMode), activeTuneMode);
           this.applyVisualizerModeControls(activeTuneMode);
         }
         this.syncVisualizerTuningUI();

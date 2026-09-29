@@ -248,3 +248,22 @@ body.zen-mode .glass-player-bar .bar-center,
 body.zen-mode .glass-player-bar .timeline-track,
 body.zen-mode .glass-player-bar .timeline-progress,
 body.zen-mode .glass-player-bar .timeline-handle { transition:none!important; }
+
+/* The visual settings drawer keeps one geometry while the player dock appears.
+   Otherwise zen-interactive-open makes its height jump by 90px on mouse move. */
+body.zen-mode #view-visualizer-drawer {
+  bottom:90px!important;
+  height:calc(100vh - 90px)!important;
+  max-height:calc(100vh - 90px)!important;
+}
+body #view-visualizer-drawer {
+  transition:transform 180ms cubic-bezier(.2,0,0,1),opacity 180ms linear!important;
+}
+body #view-visualizer-drawer:not(.open) {
+  visibility:visible!important;
+  pointer-events:none!important;
+}
+body #view-visualizer-drawer .settings-content { scrollbar-gutter:stable; }
+body.zen-mode .glass-player-bar {
+  transition:left 180ms cubic-bezier(.2,0,0,1),transform 180ms ease-out,opacity 180ms linear!important;
+}
