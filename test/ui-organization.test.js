@@ -85,3 +85,60 @@ test('two consecutive confirmations keep the second dialog visible', async () =>
   nodes.get('confirm-btn-ok').onclick({ stopPropagation() {} });
   assert.equal(await second, true);
 });
+
+test('Zen mode keeps navigation and player controls visible on every content page', () => {
+  const { ui, context } = makeUI();
+  const classes = new Set(['zen-mode']);
+  context.document.body = { classList: {
+    contains: value => classes.has(value),
+    add: (...values) => values.forEach(value => classes.add(value)),
+    remove: (...values) => values.forEach(value => classes.delete(value)),
+    toggle: (value, enabled) => enabled ? classes.add(value) : classes.delete(value)
+  } };
+  let canceled = 0;
+  ui.cancelZenAutoHide = () => canceled++;
+  for (const view of ['library', 'folders', 'settings']) {
+    ui.currentView = view;
+    ui.syncZenChromeForView();
+    assert.equal(classes.has('zen-content-view'), true);
+    assert.equal(classes.has('zen-show-sidebar'), true);
+    assert.equal(classes.has('zen-show-player-bar'), true);
+  }
+  assert.equal(canceled, 3);
+  ui.currentView = 'player';
+  ui.syncZenChromeForView();
+  assert.equal(classes.has('zen-content-view'), false);
+  assert.equal(classes.has('zen-show-sidebar'), false);
+  assert.equal(classes.has('zen-show-player-bar'), false);
+});
+
+test('entering a Zen library page measures its full-width start before pushing content aside', () => {
+  const { ui, context } = makeUI();
+  const classes = new Set(['zen-mode']);
+  context.document.body = { classList: {
+    contains: value => classes.has(value),
+    add: (...values) => values.forEach(value => classes.add(value)),
+    remove: (...values) => values.forEach(value => classes.delete(value)),
+    toggle: (value, enabled) => enabled ? classes.add(value) : classes.delete(value)
+  } };
+  let measuredAtStart = false;
+  const stage = { style: {}, get offsetWidth() { measuredAtStart = !classes.has('zen-content-view'); return 900; } };
+  const nodes = new Map([
+    ['view-player', { style: {} }], ['view-library', stage], ['view-folders', { style: {} }],
+    ['app-shell', { scrollLeft: 0 }]
+  ]);
+  context.document.getElementById = id => nodes.get(id);
+  context.document.querySelectorAll = () => [];
+  context.window.scrollX = 0;
+  ui.currentView = 'player';
+  ui.currentSubView = 'all';
+  ui.toggleSettingsDrawer = () => {};
+  ui.toggleVisualizerDrawer = () => {};
+  ui.clearSelection = () => {};
+  ui.updateLibraryHeader = () => {};
+  ui.applyFilterAndSort = () => {};
+  ui.switchView('library', 'favorites');
+  assert.equal(stage.style.display, 'flex');
+  assert.equal(measuredAtStart, true);
+  assert.equal(classes.has('zen-content-view'), true);
+});

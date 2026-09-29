@@ -216,6 +216,22 @@ body.zen-mode .glass-player-bar { transition:left 180ms cubic-bezier(.2,0,0,1),t
 body.zen-mode .glass-player-bar { transform:translateY(12px)!important; }
 body.zen-mode.zen-show-player-bar .glass-player-bar,body.zen-mode.zen-interactive-open .glass-player-bar,body.zen-mode .glass-player-bar:hover { transform:translateY(0)!important; }
 
+/* Library, category and folder pages keep both bars in place in Zen mode. */
+body.zen-mode.zen-content-view .glass-sidebar {
+  transform:translateX(0)!important;opacity:1!important;pointer-events:auto!important;
+  transition:transform 240ms cubic-bezier(.2,0,0,1),opacity 180ms linear!important;
+}
+body.zen-mode.zen-content-view .glass-player-bar {
+  left:228px!important;transform:translateY(0) scale(1)!important;opacity:1!important;
+  pointer-events:auto!important;
+  transition:left 240ms cubic-bezier(.2,0,0,1),transform 240ms cubic-bezier(.2,0,0,1),opacity 180ms linear!important;
+}
+body.zen-mode.zen-content-view .library-stage,
+body.zen-mode.zen-content-view .folders-stage {
+  left:228px!important;width:calc(100vw - 228px)!important;padding-left:24px!important;
+  transition:left 240ms cubic-bezier(.2,0,0,1),width 240ms cubic-bezier(.2,0,0,1),padding-left 240ms cubic-bezier(.2,0,0,1)!important;
+}
+
 /* Keep the bottom dock on a stable composited layer for both reveal and hide. */
 body.zen-mode .glass-player-bar { will-change:transform,opacity; }
 body.zen-mode .glass-player-bar .bar-center,

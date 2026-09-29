@@ -504,6 +504,7 @@ class UIController {
       drawer.style.display = 'flex';
       if (navBtn) navBtn.classList.add('active');
       this.currentView = 'settings';
+      this.syncZenChromeForView();
 
       // Controls are built once at startup; opening the drawer must not rebuild them.
       this.syncVisualizerCustomizationUI();
@@ -522,6 +523,7 @@ class UIController {
       const activeStage = (libStage && libStage.style.display === 'flex') ? 'library' :
                           ((foldersStage && foldersStage.style.display === 'flex') ? 'folders' : 'player');
       this.currentView = activeStage;
+      this.syncZenChromeForView();
 
       // Update active nav button
       const navItems = document.querySelectorAll('.nav-item');
@@ -557,6 +559,8 @@ class UIController {
     if (appShellEl && appShellEl.scrollLeft !== 0) appShellEl.scrollLeft = 0;
     if (window.scrollX !== 0) window.scrollTo(0, 0);
 
+    const animateZenContentEntry = document.body.classList.contains('zen-mode') &&
+      !document.body.classList.contains('zen-content-view') && viewName !== 'player';
     this.currentView = viewName;
     const viewMap = {
       player: document.getElementById('view-player'),
@@ -614,6 +618,21 @@ class UIController {
       }
     } else if (viewName === 'folders') {
       this.renderFoldersList();
+    }
+    // Give the newly shown stage its starting geometry before the sidebar pushes it inward.
+    if (animateZenContentEntry && viewMap[viewName]) void viewMap[viewName].offsetWidth;
+    this.syncZenChromeForView();
+  }
+
+  syncZenChromeForView() {
+    const body = document.body;
+    const keepVisible = body.classList.contains('zen-mode') && this.currentView !== 'player';
+    body.classList.toggle('zen-content-view', keepVisible);
+    if (keepVisible) {
+      this.cancelZenAutoHide?.();
+      body.classList.add('zen-show-sidebar', 'zen-show-player-bar');
+    } else if (body.classList.contains('zen-mode')) {
+      body.classList.remove('zen-show-sidebar', 'zen-show-player-bar');
     }
   }
 
@@ -5748,6 +5767,12 @@ class UIController {
     let sidebarTimer = null;
     let playerBarTimer = null;
     let topRightTimer = null;
+    this.cancelZenAutoHide = () => {
+      clearTimeout(sidebarTimer);
+      clearTimeout(playerBarTimer);
+      sidebarTimer = null;
+      playerBarTimer = null;
+    };
 
     const handleZenMouseMove = (e) => {
       if (!document.body.classList.contains('zen-mode') || document.body.classList.contains('zen-switching')) return;
@@ -5757,77 +5782,82 @@ class UIController {
       const winW = window.innerWidth;
       const winH = window.innerHeight;
 
-      // 1. Left Sidebar: Super-wide Proximity & Stable Interaction Envelope (Requirement 2 & 3)
-      const sidebarEl = document.getElementById('sidebar');
-      const categoryMenu = document.getElementById('category-context-menu');
-      const isCategoryMenuOpen = categoryMenu && categoryMenu.style.display !== 'none';
-      const iconPicker = document.getElementById('category-icon-picker');
-      const isIconPickerOpen = iconPicker && (iconPicker.classList.contains('visible') || iconPicker.style.display === 'block');
-      const isFocusInsideSidebar = sidebarEl && sidebarEl.matches(':focus-within');
-      const isSidebarLocked = isCategoryMenuOpen || isIconPickerOpen || isFocusInsideSidebar;
+      if (document.body.classList.contains('zen-content-view')) {
+        this.cancelZenAutoHide();
+        document.body.classList.add('zen-show-sidebar', 'zen-show-player-bar');
+      } else {
+        // 1. Left Sidebar: Super-wide Proximity & Stable Interaction Envelope (Requirement 2 & 3)
+        const sidebarEl = document.getElementById('sidebar');
+        const categoryMenu = document.getElementById('category-context-menu');
+        const isCategoryMenuOpen = categoryMenu && categoryMenu.style.display !== 'none';
+        const iconPicker = document.getElementById('category-icon-picker');
+        const isIconPickerOpen = iconPicker && (iconPicker.classList.contains('visible') || iconPicker.style.display === 'block');
+        const isFocusInsideSidebar = sidebarEl && sidebarEl.matches(':focus-within');
+        const isSidebarLocked = isCategoryMenuOpen || isIconPickerOpen || isFocusInsideSidebar;
 
-      // Super-wide trigger zone: 280px minimum or 22% of window width (covers the full 260px sidebar width)
-      const leftTriggerZone = Math.max(280, winW * 0.22);
-      const isNearLeft = mouseX <= leftTriggerZone;
+        // Super-wide trigger zone: 280px minimum or 22% of window width (covers the full 260px sidebar width)
+        const leftTriggerZone = Math.max(280, winW * 0.22);
+        const isNearLeft = mouseX <= leftTriggerZone;
 
-      // Stable envelope: 380px (well beyond sidebar 260px width + 100px buffer)
-      const sidebarRight = 228;
-      const isInsideSidebarEnvelope = mouseX <= Math.max(380, sidebarRight + 100);
+        // Stable envelope: 380px (well beyond sidebar 260px width + 100px buffer)
+        const sidebarRight = 228;
+        const isInsideSidebarEnvelope = mouseX <= Math.max(380, sidebarRight + 100);
 
-      if (isSidebarLocked || isNearLeft || (document.body.classList.contains('zen-show-sidebar') && isInsideSidebarEnvelope)) {
-        if (sidebarTimer) {
-          clearTimeout(sidebarTimer);
-          sidebarTimer = null;
-        }
-        document.body.classList.add('zen-show-sidebar');
-      } else if (document.body.classList.contains('zen-show-sidebar') && !isSidebarLocked) {
-        if (!sidebarTimer) {
-          sidebarTimer = setTimeout(() => {
-            const curMenuOpen = categoryMenu && categoryMenu.style.display !== 'none';
-            const curPickerOpen = iconPicker && (iconPicker.classList.contains('visible') || iconPicker.style.display === 'block');
-            const curFocus = sidebarEl && sidebarEl.matches(':focus-within');
-            if (!curMenuOpen && !curPickerOpen && !curFocus) {
-              document.body.classList.remove('zen-show-sidebar');
-            }
+        if (isSidebarLocked || isNearLeft || (document.body.classList.contains('zen-show-sidebar') && isInsideSidebarEnvelope)) {
+          if (sidebarTimer) {
+            clearTimeout(sidebarTimer);
             sidebarTimer = null;
-          }, 800);
+          }
+          document.body.classList.add('zen-show-sidebar');
+        } else if (document.body.classList.contains('zen-show-sidebar') && !isSidebarLocked) {
+          if (!sidebarTimer) {
+            sidebarTimer = setTimeout(() => {
+              const curMenuOpen = categoryMenu && categoryMenu.style.display !== 'none';
+              const curPickerOpen = iconPicker && (iconPicker.classList.contains('visible') || iconPicker.style.display === 'block');
+              const curFocus = sidebarEl && sidebarEl.matches(':focus-within');
+              if (!curMenuOpen && !curPickerOpen && !curFocus) {
+                document.body.classList.remove('zen-show-sidebar');
+              }
+              sidebarTimer = null;
+            }, 800);
+          }
         }
-      }
 
-      // 2. Bottom Player Bar: Super-wide Proximity & Stable Interaction Envelope (Requirement 3)
-      const playerBarEl = document.querySelector('.glass-player-bar');
-      const queueDrawer = document.getElementById('glass-queue-drawer');
-      const eqModal = document.getElementById('glass-eq-modal');
-      const isDrawerOpen = queueDrawer && queueDrawer.classList.contains('open');
-      const isEqOpen = eqModal && (eqModal.classList.contains('open') || eqModal.style.display === 'flex');
+        // 2. Bottom Player Bar: Super-wide Proximity & Stable Interaction Envelope (Requirement 3)
+        const playerBarEl = document.querySelector('.glass-player-bar');
+        const queueDrawer = document.getElementById('glass-queue-drawer');
+        const eqModal = document.getElementById('glass-eq-modal');
+        const isDrawerOpen = queueDrawer && queueDrawer.classList.contains('open');
+        const isEqOpen = eqModal && (eqModal.classList.contains('open') || eqModal.style.display === 'flex');
 
-      // Active interaction locks: dragging seeker, dragging volume, dragging scrollbar, focus-within
-      const isFocusInsidePlayerBar = playerBarEl && playerBarEl.matches(':focus-within');
-      const isDraggingBottom = this.isDraggingTimeline || this.isDraggingVolume || this.isDraggingScrollbar;
-      const isInteractiveActive = isDrawerOpen || isEqOpen || isDraggingBottom || isFocusInsidePlayerBar;
-      document.body.classList.toggle('zen-interactive-open', isInteractiveActive);
+        // Active interaction locks: dragging seeker, dragging volume, dragging scrollbar, focus-within
+        const isFocusInsidePlayerBar = playerBarEl && playerBarEl.matches(':focus-within');
+        const isDraggingBottom = this.isDraggingTimeline || this.isDraggingVolume || this.isDraggingScrollbar;
+        const isInteractiveActive = isDrawerOpen || isEqOpen || isDraggingBottom || isFocusInsidePlayerBar;
+        document.body.classList.toggle('zen-interactive-open', isInteractiveActive);
 
-      // Super-wide trigger zone: 220px minimum or 28% of window height (over 2.5x the player bar height)
-      const bottomTriggerZone = Math.max(220, winH * 0.28);
-      const isNearBottom = (mouseY >= winH - bottomTriggerZone);
+        // Super-wide trigger zone: 220px minimum or 28% of window height (over 2.5x the player bar height)
+        const bottomTriggerZone = Math.max(220, winH * 0.28);
+        const isNearBottom = (mouseY >= winH - bottomTriggerZone);
 
-      // Stable envelope: 240px minimum or 30% of window height
-      const isInsideBottomEnvelope = mouseY >= winH - Math.max(240, winH * 0.30);
+        // Stable envelope: 240px minimum or 30% of window height
+        const isInsideBottomEnvelope = mouseY >= winH - Math.max(240, winH * 0.30);
 
-      if (isInteractiveActive || isNearBottom || (document.body.classList.contains('zen-show-player-bar') && isInsideBottomEnvelope)) {
-        if (playerBarTimer) {
-          clearTimeout(playerBarTimer);
-          playerBarTimer = null;
-        }
-        document.body.classList.add('zen-show-player-bar');
-      } else if (document.body.classList.contains('zen-show-player-bar') && !isInteractiveActive) {
-        if (!playerBarTimer) {
-          playerBarTimer = setTimeout(() => {
-            if (!document.body.classList.contains('zen-interactive-open') && !this.isDraggingTimeline && !this.isDraggingVolume) {
-              document.body.classList.remove('zen-show-player-bar');
-            }
+        if (isInteractiveActive || isNearBottom || (document.body.classList.contains('zen-show-player-bar') && isInsideBottomEnvelope)) {
+          if (playerBarTimer) {
+            clearTimeout(playerBarTimer);
             playerBarTimer = null;
-          }, 800);
+          }
+          document.body.classList.add('zen-show-player-bar');
+        } else if (document.body.classList.contains('zen-show-player-bar') && !isInteractiveActive) {
+          if (!playerBarTimer) {
+            playerBarTimer = setTimeout(() => {
+              if (!document.body.classList.contains('zen-interactive-open') && !this.isDraggingTimeline && !this.isDraggingVolume) {
+                document.body.classList.remove('zen-show-player-bar');
+              }
+              playerBarTimer = null;
+            }, 800);
+          }
         }
       }
 
@@ -5867,6 +5897,10 @@ class UIController {
     window.addEventListener('mouseout', (e) => {
       if (!document.body.classList.contains('zen-mode')) return;
       if (!e.relatedTarget && !e.toElement) {
+        if (document.body.classList.contains('zen-content-view')) {
+          document.body.classList.remove('zen-show-top-right');
+          return;
+        }
         if (!document.body.classList.contains('zen-interactive-open')) {
           if (!this.isDraggingTimeline && !this.isDraggingVolume && !this.isDraggingScrollbar) {
             document.body.classList.remove('zen-show-sidebar', 'zen-show-player-bar', 'zen-show-top-right');
@@ -6145,7 +6179,7 @@ class UIController {
       const hifiPop = document.getElementById('hifi-popover');
       if (hifiPop) hifiPop.style.display = 'none';
     } else {
-      document.body.classList.remove('zen-mode', 'zen-show-sidebar', 'zen-show-player-bar', 'zen-show-top-right', 'zen-show-top-bar', 'zen-interactive-open');
+      document.body.classList.remove('zen-mode', 'zen-content-view', 'zen-show-sidebar', 'zen-show-player-bar', 'zen-show-top-right', 'zen-show-top-bar', 'zen-interactive-open');
       const appShellEl = document.getElementById('app-shell');
       if (appShellEl) appShellEl.scrollLeft = 0;
       window.scrollTo(0, 0);
