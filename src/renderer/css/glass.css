@@ -1154,6 +1154,7 @@ body.compact-sidebar-nav .sidebar-top-nav .nav-item[data-tooltip]:hover::after {
   position: fixed;
   z-index: 9999;
   min-width: 220px;
+  max-height: calc(100vh - 16px);
   background: rgba(20, 24, 38, 0.88);
   backdrop-filter: blur(28px) saturate(180%);
   -webkit-backdrop-filter: blur(28px) saturate(180%);
@@ -2603,7 +2604,7 @@ body.fullscreen-transitioning #visualizer-canvas {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 220px;
+  max-height: min(45vh, 420px);
   overflow-y: auto;
   transition: max-height 0.25s ease, opacity 0.25s ease;
 }
@@ -2613,6 +2614,29 @@ body.fullscreen-transitioning #visualizer-canvas {
   opacity: 0;
   overflow: hidden;
 }
+
+.category-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+}
+.category-group-heading:hover { background: rgba(255, 255, 255, .06); }
+.category-group-name { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.category-group-children.collapsed { display: none; }
+.category-group-children .category-item { padding-left: 20px; }
+.category-empty { font-size: 12px; color: var(--text-dim); padding: 6px 12px; }
+.category-submenu-group { padding: 7px 10px 3px; font-size: 11px; color: var(--text-muted); font-weight: 700; }
+.category-submenu-child { padding-left: 20px; }
+.tag-manager-hint { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+.all-tags-list { max-height: min(46vh, 350px); overflow-y: auto; margin: 10px 0 16px; }
+.all-tags-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 8px; border-bottom: 1px solid var(--glass-border-subtle); font-size: 13px; }
+.all-tags-row button { border: 0; border-radius: 7px; padding: 4px 10px; color: #fca5a5; background: rgba(239,68,68,.12); cursor: pointer; }
+.all-tags-row button:hover { background: rgba(239,68,68,.25); }
 
 .category-item {
   display: flex;
@@ -3454,7 +3478,7 @@ body.zen-mode.zen-interactive-open #view-settings {
   left: calc(100% - 2px);
   margin-left: 0;
   min-width: 175px;
-  max-height: 260px;
+  max-height: min(360px, calc(100vh - 24px));
   overflow-y: auto;
   background: rgba(18, 22, 36, 0.96);
   backdrop-filter: blur(28px);

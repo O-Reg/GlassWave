@@ -65,11 +65,16 @@ contextBridge.exposeInMainWorld('glasswaveAPI', {
 
   // Categories
   getCategories: () => ipcRenderer.invoke('library-get-categories'),
-  addCategory: (name) => ipcRenderer.invoke('library-add-category', name),
+  getCategoryGroups: () => ipcRenderer.invoke('library-get-category-groups'),
+  addCategoryGroup: (name) => ipcRenderer.invoke('library-add-category-group', name),
+  renameCategoryGroup: (id, name) => ipcRenderer.invoke('library-rename-category-group', { id, name }),
+  deleteCategoryGroup: (id) => ipcRenderer.invoke('library-delete-category-group', id),
+  addCategory: (name, groupId) => ipcRenderer.invoke('library-add-category', { name, groupId }),
   renameCategory: (id, name) => ipcRenderer.invoke('library-rename-category', { id, name }),
   deleteCategory: (id) => ipcRenderer.invoke('library-delete-category', id),
   reorderCategories: (ids) => ipcRenderer.invoke('library-reorder-categories', ids),
   addToCategory: (catId, trackPaths) => ipcRenderer.invoke('library-add-to-category', { catId, trackPaths }),
+  moveToCategory: (catId, trackPaths) => ipcRenderer.invoke('library-move-to-category', { catId, trackPaths }),
   removeFromCategory: (catId, trackPaths) => ipcRenderer.invoke('library-remove-from-category', { catId, trackPaths }),
 
   // Favorites
@@ -80,6 +85,7 @@ contextBridge.exposeInMainWorld('glasswaveAPI', {
   updateTrackTags: (trackPath, tags) => ipcRenderer.invoke('library-update-tags', { trackPath, tags }),
   batchUpdateTags: (trackPaths, addTags, removeTags) => ipcRenderer.invoke('library-batch-update-tags', { trackPaths, addTags, removeTags }),
   getCustomTags: () => ipcRenderer.invoke('library-get-custom-tags'),
+  getHiddenPresetTags: () => ipcRenderer.invoke('library-get-hidden-preset-tags'),
   addCustomTag: (tag) => ipcRenderer.invoke('library-add-custom-tag', tag),
   removeCustomTag: (tag) => ipcRenderer.invoke('library-remove-custom-tag', tag),
   inspectAudioSpec: (filePath) => ipcRenderer.invoke('audio-inspect-spec', filePath),

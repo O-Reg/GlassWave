@@ -932,11 +932,16 @@ function createWindow() {
 
   // Categories
   ipcMain.handle('library-get-categories', () => database ? database.getCategories() : []);
-  ipcMain.handle('library-add-category', (event, name) => database ? database.addCategory(name) : []);
+  ipcMain.handle('library-get-category-groups', () => database ? database.getCategoryGroups() : []);
+  ipcMain.handle('library-add-category-group', (event, name) => database ? database.addCategoryGroup(name) : []);
+  ipcMain.handle('library-rename-category-group', (event, { id, name }) => database ? database.renameCategoryGroup(id, name) : []);
+  ipcMain.handle('library-delete-category-group', (event, id) => database ? database.deleteCategoryGroup(id) : []);
+  ipcMain.handle('library-add-category', (event, { name, groupId }) => database ? database.addCategory(name, groupId) : []);
   ipcMain.handle('library-rename-category', (event, { id, name }) => database ? database.renameCategory(id, name) : []);
   ipcMain.handle('library-delete-category', (event, id) => database ? database.deleteCategory(id) : []);
   ipcMain.handle('library-reorder-categories', (event, ids) => database ? database.reorderCategories(ids) : []);
   ipcMain.handle('library-add-to-category', (event, { catId, trackPaths }) => database ? database.addTracksToCategory(catId, trackPaths) : []);
+  ipcMain.handle('library-move-to-category', (event, { catId, trackPaths }) => database ? database.moveTracksToCategory(catId, trackPaths) : []);
   ipcMain.handle('library-remove-from-category', (event, { catId, trackPaths }) => database ? database.removeTracksFromCategory(catId, trackPaths) : []);
   ipcMain.handle('library-update-category-icon', (event, { id, iconIndex }) => database ? database.updateCategoryIcon(id, iconIndex) : []);
 
@@ -949,6 +954,7 @@ function createWindow() {
   ipcMain.handle('library-update-tags', (event, { trackPath, tags }) => database ? database.updateTrackTags(trackPath, tags) : []);
   ipcMain.handle('library-batch-update-tags', (event, { trackPaths, addTags, removeTags }) => database ? database.batchUpdateTags(trackPaths, addTags, removeTags) : []);
   ipcMain.handle('library-get-custom-tags', () => database ? database.getCustomTags() : []);
+  ipcMain.handle('library-get-hidden-preset-tags', () => database ? database.getHiddenPresetTags() : []);
   ipcMain.handle('library-add-custom-tag', (event, tag) => database ? database.addCustomTag(tag) : []);
   ipcMain.handle('library-remove-custom-tag', (event, tag) => database ? database.removeCustomTag(tag) : []);
 

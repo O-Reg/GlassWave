@@ -48,9 +48,11 @@ class UIController {
     this.filteredTracks = [];
     this.playbackHistory = [];
     this.categories = [];
+    this.categoryGroups = [];
     this.customTags = [];
     this.presetMoods = ['黑暗', '悲伤', '温暖', '神秘', '庄严', '激昂', '宁静', '欢快'];
     this.presetUsages = ['开场', '背景', '转场', '高潮', '结尾', '旁白', '主题曲'];
+    this.hiddenPresetTags = new Set();
 
     // Single Source of Truth for UI Layout Mode: 'NORMAL' | 'VISUALIZER_FULLSCREEN'
     this.uiMode = 'NORMAL';
@@ -553,6 +555,7 @@ class UIController {
     }
 
     if (viewName === 'library') {
+      if (this.currentSubView !== subView) this.clearSelection();
       this.currentSubView = subView;
       this.updateLibraryHeader();
       this.applyFilterAndSort();
@@ -1602,10 +1605,19 @@ class UIController {
     const btnCancelCat = document.getElementById('btn-cancel-cat');
     const btnSaveCat = document.getElementById('btn-save-cat');
     const titleCatModal = document.getElementById('cat-modal-title');
+    const parentSelect = document.getElementById('cat-parent-group');
 
-    const openCategoryModal = (catId = null, existingName = '') => {
+    const openCategoryModal = (catId = null, existingName = '', kind = 'category', groupId = null) => {
       this.editingCategoryId = catId;
-      if (titleCatModal) titleCatModal.textContent = catId ? '修改分类名称' : '新建分类';
+      this.editingCategoryKind = kind;
+      if (titleCatModal) titleCatModal.textContent = `${catId ? '重命名' : '新建'}${kind === 'group' ? '一级分类' : '二级分类'}`;
+      if (parentSelect) {
+        parentSelect.style.display = kind === 'group' ? 'none' : 'block';
+        parentSelect.innerHTML = (this.categoryGroups || []).map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join('');
+        if (groupId) parentSelect.value = groupId;
+        if (catId && kind === 'category') parentSelect.disabled = true;
+        else parentSelect.disabled = false;
+      }
       if (inputCatName) {
         inputCatName.value = existingName || '';
         setTimeout(() => inputCatName.focus(), 50);
@@ -1619,7 +1631,7 @@ class UIController {
       if (inputCatName) inputCatName.value = '';
     };
 
-    if (btnAddQuick) btnAddQuick.onclick = () => openCategoryModal();
+    if (btnAddQuick) btnAddQuick.onclick = () => openCategoryModal(null, '', 'group');
     if (btnCloseCat) btnCloseCat.onclick = closeCategoryModal;
     if (btnCancelCat) btnCancelCat.onclick = closeCategoryModal;
 
@@ -1628,10 +1640,13 @@ class UIController {
         const name = inputCatName.value.trim();
         if (!name) return;
 
-        if (this.editingCategoryId) {
+        if (this.editingCategoryKind === 'group') {
+          if (this.editingCategoryId) await window.glasswaveAPI.renameCategoryGroup(this.editingCategoryId, name);
+          else await window.glasswaveAPI.addCategoryGroup(name);
+        } else if (this.editingCategoryId) {
           await window.glasswaveAPI.renameCategory(this.editingCategoryId, name);
         } else {
-          await window.glasswaveAPI.addCategory(name);
+          await window.glasswaveAPI.addCategory(name, parentSelect?.value);
         }
         await this.loadCategories();
         closeCategoryModal();
@@ -1648,7 +1663,9 @@ class UIController {
 
   async loadCategories() {
     if (!window.glasswaveAPI || !window.glasswaveAPI.getCategories) return;
-    this.categories = await window.glasswaveAPI.getCategories();
+    [this.categories, this.categoryGroups] = await Promise.all([
+      window.glasswaveAPI.getCategories(), window.glasswaveAPI.getCategoryGroups()
+    ]);
     this.renderSidebarCategories();
   }
 
@@ -1657,12 +1674,26 @@ class UIController {
     if (!container) return;
 
     container.innerHTML = '';
-    if (this.categories.length === 0) {
-      container.innerHTML = '<div style="font-size:12px; color:var(--text-dim); padding:6px 12px;">暂无分类，点击 + 创建</div>';
+    if (!this.categoryGroups?.length) {
+      container.innerHTML = '<div class="category-empty">暂无一级分类，点击 + 创建</div>';
       return;
     }
 
-    this.categories.forEach(cat => {
+    this.categoryGroups.forEach(group => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'category-group';
+      const heading = document.createElement('div');
+      heading.className = 'category-group-heading';
+      heading.innerHTML = `<span class="category-group-name">${escapeHtml(group.name)}</span><button class="btn-add-cat-icon category-add-child" title="新建二级分类">+</button>`;
+      const children = document.createElement('div');
+      children.className = 'category-group-children';
+      heading.querySelector('.category-group-name').onclick = () => children.classList.toggle('collapsed');
+      heading.querySelector('.category-add-child').onclick = () => this.openCategoryModal(null, '', 'category', group.id);
+      heading.oncontextmenu = e => { e.preventDefault(); e.stopPropagation(); this.openCategoryContextMenu(group, e.clientX, e.clientY, true); };
+      wrapper.appendChild(heading);
+      wrapper.appendChild(children);
+      container.appendChild(wrapper);
+      this.categories.filter(cat => cat.groupId === group.id).forEach(cat => {
       const item = document.createElement('div');
       item.className = `category-item ${this.currentSubView === `category:${cat.id}` ? 'active' : ''}`;
       item.dataset.catId = cat.id;
@@ -1729,9 +1760,9 @@ class UIController {
           if (data) {
             const paths = JSON.parse(data);
             if (Array.isArray(paths) && paths.length > 0) {
-              await window.glasswaveAPI.addToCategory(cat.id, paths);
+              const updated = await window.glasswaveAPI.addToCategory(cat.id, paths);
               await this.loadCategories();
-              this.applyFilterAndSort();
+              this.setTracks(updated);
             }
           }
         } catch (err) {
@@ -1746,7 +1777,8 @@ class UIController {
         this.openCategoryContextMenu(cat, e.clientX, e.clientY);
       };
 
-      container.appendChild(item);
+      children.appendChild(item);
+      });
     });
   }
 
@@ -1842,19 +1874,6 @@ class UIController {
         this.closeCategoryIconPicker();
       }
     });
-  }
-
-  playCategory(catId) {
-    const cat = this.categories.find(c => c.id === catId);
-    if (!cat) return;
-    const catTracks = this.allTracks.filter(t => cat.trackPaths && cat.trackPaths.includes(t.path));
-    if (catTracks.length === 0) {
-      this.showToast(`分类【${cat.name}】中暂无歌曲`);
-      return;
-    }
-    this.audioEngine.setQueue(catTracks, 0);
-    this.audioEngine.loadTrack(catTracks[0], true);
-    this.showToast(`▶ 开始播放分类【${cat.name}】（共 ${catTracks.length} 首）`);
   }
 
   showToast(msg, duration = 2200) {
@@ -2330,10 +2349,23 @@ class UIController {
   }
 
   bindTagSystem() {
-    // Preset Tags across Mood and Usage
-    this.presetMoods = ['黑暗', '悲伤', '温暖', '神秘', '庄严', '激昂', '宁静', '欢快'];
-    this.presetUsages = ['开场', '背景', '转场', '高潮', '结尾', '旁白', '主题曲'];
     this.renderTagPillBar();
+    const allModal = document.getElementById('glass-all-tags-modal');
+    const closeAll = () => { if (allModal) allModal.style.display = 'none'; };
+    const openAll = () => { this.renderAllTagsManager(); if (allModal) allModal.style.display = 'flex'; };
+    document.getElementById('pop-manage-all-tags')?.addEventListener('click', openAll);
+    document.getElementById('btn-close-all-tags')?.addEventListener('click', closeAll);
+    allModal?.addEventListener('click', e => { if (e.target === allModal) closeAll(); });
+    const allInput = document.getElementById('all-tags-new-input');
+    const addAll = async () => {
+      const value = allInput?.value.trim();
+      if (!value) return;
+      await this.addNewCustomTag(value);
+      allInput.value = '';
+      await this.loadCustomTags();
+    };
+    document.getElementById('btn-add-all-tag')?.addEventListener('click', addAll);
+    allInput?.addEventListener('keydown', e => { if (e.key === 'Enter') addAll(); });
 
     // Tag Management Modal Binders
     const modalTag = document.getElementById('glass-tag-modal');
@@ -2367,7 +2399,6 @@ class UIController {
       const tag = inputCustomTag?.value.trim();
       if (tag) {
         this.activeTagModalTags.add(tag);
-        this.addNewCustomTag(tag);
         inputCustomTag.value = '';
         this.renderTagModalChips();
       }
@@ -2388,6 +2419,7 @@ class UIController {
           const removedTags = [...new Set(this.activeTagModalTracks.flatMap(t=>t.tags || []))].filter(tag=>!newTags.includes(tag));
           const updated = await window.glasswaveAPI.batchUpdateTags(paths, newTags, removedTags);
           this.setTracks(updated);
+          await this.loadCustomTags();
         }
         closeTagModal();
       };
@@ -2506,7 +2538,7 @@ class UIController {
     // Render Custom Tags
     if (customWrap) {
       customWrap.innerHTML = '';
-      const cTags = Array.from(new Set(this.customTags || []));
+      const cTags = Array.from(new Set(this.customTags || [])).filter(tag => !this.presetMoods.includes(tag) && !this.presetUsages.includes(tag));
       if (countHint) countHint.textContent = `${cTags.length} 个`;
 
       if (cTags.length === 0) {
@@ -2543,12 +2575,23 @@ class UIController {
   async loadCustomTags() {
     if (window.glasswaveAPI && typeof window.glasswaveAPI.getCustomTags === 'function') {
       try {
-        const tags = await window.glasswaveAPI.getCustomTags();
+        const [tags, hidden] = await Promise.all([
+          window.glasswaveAPI.getCustomTags(), window.glasswaveAPI.getHiddenPresetTags()
+        ]);
         if (Array.isArray(tags)) {
           this.customTags = tags;
+          this.hiddenPresetTags = new Set(hidden || []);
+          const moods = ['黑暗', '悲伤', '温暖', '神秘', '庄严', '激昂', '宁静', '欢快'];
+          const usages = ['开场', '背景', '转场', '高潮', '结尾', '旁白', '主题曲'];
+          this.presetMoods = moods.filter(t => !this.hiddenPresetTags.has(t));
+          this.presetUsages = usages.filter(t => !this.hiddenPresetTags.has(t));
+          document.querySelectorAll('#modal-preset-moods .preset-pill, #modal-preset-usages .preset-pill').forEach(pill => {
+            pill.style.display = this.hiddenPresetTags.has(pill.dataset.tag) ? 'none' : '';
+          });
           this.renderTagPillBar();
           this.renderSearchMoreTags();
           this.renderModalCustomTags();
+          this.renderAllTagsManager();
         }
       } catch (e) {}
     }
@@ -2557,7 +2600,7 @@ class UIController {
   async addNewCustomTag(tagName) {
     const clean = (tagName || '').trim();
     if (!clean) return;
-    if (this.customTags && this.customTags.includes(clean)) {
+    if (this.customTags && this.customTags.includes(clean) && !this.hiddenPresetTags.has(clean)) {
       this.showToast(`标签已存在: ${clean}`);
       return;
     }
@@ -2572,9 +2615,7 @@ class UIController {
       } catch (e) {}
     }
 
-    this.renderTagPillBar();
-    this.renderSearchMoreTags();
-    this.renderModalCustomTags();
+    await this.loadCustomTags();
     this.showToast(`✨ 已创建自定义标签: ${clean}`);
   }
 
@@ -2582,23 +2623,51 @@ class UIController {
     const clean = (tagName || '').trim();
     if (!clean) return;
 
-    if (Array.isArray(this.customTags)) {
-      this.customTags = this.customTags.filter(t => t !== clean);
-    }
+    const count = this.allTracks.filter(t => (t.tags || []).includes(clean)).length;
+    const ok = await this.showGlassConfirm({
+      title: '删除全局标签',
+      message: `删除“${clean}”并从 ${count} 首歌曲移除？`,
+      subtext: '歌曲文件不会删除。',
+      confirmText: '删除标签',
+      danger: true
+    });
+    if (!ok) return;
     this.activeFilterTags.delete(clean);
 
     if (window.glasswaveAPI && typeof window.glasswaveAPI.removeCustomTag === 'function') {
       try {
-        const updated = await window.glasswaveAPI.removeCustomTag(clean);
-        if (Array.isArray(updated)) this.customTags = updated;
-      } catch (e) {}
+        await window.glasswaveAPI.removeCustomTag(clean);
+        const tracks = await window.glasswaveAPI.getTracks();
+        this.setTracks(tracks);
+      } catch (e) {
+        console.error('Failed to delete tag:', e);
+        this.showToast('删除标签失败，请重试');
+        return;
+      }
     }
-
-    this.renderTagPillBar();
-    this.renderSearchMoreTags();
-    this.renderModalCustomTags();
+    await this.loadCustomTags();
     this.applyFilterAndSort();
-    this.showToast(`已删除自定义标签: ${clean}`);
+    this.showToast(`已删除标签: ${clean}`);
+  }
+
+  renderAllTagsManager() {
+    const list = document.getElementById('all-tags-list');
+    if (!list) return;
+    list.innerHTML = '';
+    const tags = new Set([...(this.presetMoods || []), ...(this.presetUsages || []), ...(this.customTags || [])]);
+    if (!tags.size) list.textContent = '暂无标签';
+    [...tags].sort((a, b) => a.localeCompare(b, 'zh-CN')).forEach(tag => {
+      const row = document.createElement('div');
+      row.className = 'all-tags-row';
+      const label = document.createElement('span');
+      const count = this.allTracks.filter(t => (t.tags || []).includes(tag)).length;
+      label.textContent = `${tag} · ${count} 首`;
+      const del = document.createElement('button');
+      del.textContent = '删除';
+      del.onclick = () => this.deleteCustomTag(tag);
+      row.append(label, del);
+      list.appendChild(row);
+    });
   }
 
   renderModalCustomTags() {
@@ -2606,7 +2675,7 @@ class UIController {
     const wrap = document.getElementById('modal-preset-customs');
     if (!group || !wrap) return;
 
-    const cTags = Array.from(new Set(this.customTags || []));
+    const cTags = Array.from(new Set(this.customTags || [])).filter(tag => !this.presetMoods.includes(tag) && !this.presetUsages.includes(tag));
     if (cTags.length === 0) {
       group.style.display = 'none';
       return;
@@ -2792,7 +2861,10 @@ class UIController {
           alert('请先在左侧边栏“我的分类”中创建分类！');
           return;
         }
-        selectBatchCat.innerHTML = this.categories.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+        selectBatchCat.innerHTML = this.categories.map(c => {
+          const group = this.categoryGroups.find(g => g.id === c.groupId);
+          return `<option value="${escapeHtml(c.id)}">${escapeHtml(group?.name || '分类')} / ${escapeHtml(c.name)}</option>`;
+        }).join('');
         if (modalBatchCat) modalBatchCat.style.display = 'flex';
       };
     }
@@ -2801,11 +2873,11 @@ class UIController {
       btnConfirmBatchCat.onclick = async () => {
         const catId = selectBatchCat?.value;
         const selected = this.getSelectedTracks();
-        const paths = selected.map(t => t.path);
+        const paths = [...new Set(selected.map(t => t.path))];
         if (catId && paths.length > 0 && window.glasswaveAPI) {
-          await window.glasswaveAPI.addToCategory(catId, paths);
+          const updated = await window.glasswaveAPI.addToCategory(catId, paths);
           await this.loadCategories();
-          this.applyFilterAndSort();
+          this.setTracks(updated);
         }
         closeBatchCatModal();
         this.clearSelection();
@@ -3140,6 +3212,7 @@ class UIController {
         this.lastSelectedTrackIndex = idx;
         this.updateSelectionUI();
       } else if (e.shiftKey && this.lastSelectedTrackIndex !== -1) {
+        this.selectedTrackPaths.clear();
         const start = Math.min(this.lastSelectedTrackIndex, idx);
         const end = Math.max(this.lastSelectedTrackIndex, idx);
         for (let i = start; i <= end; i++) {
@@ -3149,12 +3222,21 @@ class UIController {
         }
         this.updateSelectionUI();
       } else {
-        if (this.selectedTrackPaths.size > 0) {
-          this.clearSelection();
-        }
-        this.audioEngine.setQueue(this.filteredTracks, idx);
-        this.audioEngine.loadTrack(track, true);
+        this.selectedTrackPaths.clear();
+        this.selectedTrackPaths.add(track.path);
+        this.lastSelectedTrackIndex = idx;
+        this.updateSelectionUI();
       }
+    });
+
+    container.addEventListener('dblclick', e => {
+      if (e.target.closest('.track-row-fav')) return;
+      const row = e.target.closest('.track-row');
+      const idx = row ? Number(row.dataset.index) : -1;
+      const track = this.filteredTracks[idx];
+      if (!track) return;
+      this.audioEngine.setQueue(this.filteredTracks, idx);
+      this.audioEngine.loadTrack(track, true);
     });
 
     // Unified contextmenu delegation
@@ -3166,6 +3248,12 @@ class UIController {
       const idx = parseInt(row.dataset.index, 10);
       const track = this.filteredTracks[idx];
       if (track) {
+        if (!this.selectedTrackPaths.has(track.path)) {
+          this.selectedTrackPaths.clear();
+          this.selectedTrackPaths.add(track.path);
+          this.lastSelectedTrackIndex = idx;
+          this.updateSelectionUI();
+        }
         this.openContextMenu(track, e.clientX, e.clientY);
       }
     });
@@ -4075,11 +4163,16 @@ class UIController {
       if (this.categories.length === 0) {
         submenu.innerHTML = '<div style="font-size:12px; color:var(--text-dim); padding:4px 8px;">无可用分类</div>';
       } else {
-        this.categories.forEach(cat => {
+        (this.categoryGroups || []).forEach(group => {
+          const groupLabel = document.createElement('div');
+          groupLabel.className = 'category-submenu-group';
+          groupLabel.textContent = group.name;
+          submenu.appendChild(groupLabel);
+          this.categories.filter(cat => cat.groupId === group.id).forEach(cat => {
           const iconIdx = (typeof cat.iconIndex === 'number' && cat.iconIndex >= 0) ? (cat.iconIndex % CATEGORY_ICONS.length) : 0;
           const curIcon = CATEGORY_ICONS[iconIdx];
           const item = document.createElement('div');
-          item.className = 'menu-item';
+          item.className = 'menu-item category-submenu-child';
           item.innerHTML = `<span style="display:flex;align-items:center;gap:8px;"><span style="width:15px;height:15px;color:var(--accent-primary);display:inline-flex;align-items:center;flex-shrink:0;">${curIcon.svg}</span><span>${escapeHtml(cat.name)}</span></span>`;
           item.onclick = async (ev) => {
             ev.stopPropagation();
@@ -4088,11 +4181,15 @@ class UIController {
             if (this.selectedTrackPaths.has(track.path)) {
               paths = Array.from(this.selectedTrackPaths);
             }
-            await window.glasswaveAPI.addToCategory(cat.id, paths);
+            paths = [...new Set(paths)].filter(p => this.allTracks.some(t => t.path === p));
+            const updated = await window.glasswaveAPI.moveToCategory(cat.id, paths);
             await this.loadCategories();
-            this.applyFilterAndSort();
+            this.setTracks(updated);
+            this.clearSelection();
+            this.showToast(`已移到【${group.name} / ${cat.name}】，所有歌曲及原文件保持不变`);
           };
           submenu.appendChild(item);
+          });
         });
       }
 
@@ -4103,7 +4200,7 @@ class UIController {
       itemNew.onclick = (ev) => {
         ev.stopPropagation();
         menu.style.display = 'none';
-        this.openCategoryModal();
+        this.openCategoryModal(null, '', this.categoryGroups?.length ? 'category' : 'group', this.categoryGroups?.[0]?.id);
       };
       submenu.appendChild(itemNew);
 
@@ -4115,11 +4212,14 @@ class UIController {
           if (subGraceTimer) { clearTimeout(subGraceTimer); subGraceTimer = null; }
           catParent.classList.add('is-active');
           const pRect = catParent.getBoundingClientRect();
-          if (pRect.right + 190 > window.innerWidth) {
+          if (pRect.right + 230 > window.innerWidth) {
             submenu.classList.add('flip-left');
           } else {
             submenu.classList.remove('flip-left');
           }
+          submenu.style.top = '-4px';
+          const subRect = submenu.getBoundingClientRect();
+          submenu.style.top = `${-4 + Math.min(0, window.innerHeight - subRect.bottom - 10)}px`;
         };
         const deactivateSub = () => {
           if (subGraceTimer) clearTimeout(subGraceTimer);
@@ -4138,16 +4238,16 @@ class UIController {
 
     menu.style.display = 'block';
 
-    const menuWidth = 240;
-    const menuHeight = 340;
-    let x = clientX;
-    let y = clientY;
+    this.placeMenuInViewport(menu, clientX, clientY);
+  }
 
-    if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 12;
-    if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 12;
-
-    menu.style.left = `${Math.max(10, x)}px`;
-    menu.style.top = `${Math.max(10, y)}px`;
+  placeMenuInViewport(menu, x, y) {
+    menu.style.left = '0px';
+    menu.style.top = '0px';
+    const width = menu.offsetWidth;
+    const height = menu.offsetHeight;
+    menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - width - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - height - 8))}px`;
   }
 
   // =========================================================================
@@ -4162,6 +4262,14 @@ class UIController {
         menu.style.display = 'none';
       }
     });
+
+    const btnAddChild = document.getElementById('cat-ctx-add-child');
+    if (btnAddChild) btnAddChild.onclick = () => {
+      menu.style.display = 'none';
+      if (this.selectedCategoryForMenu && this.categoryContextIsGroup) {
+        this.openCategoryModal(null, '', 'category', this.selectedCategoryForMenu.id);
+      }
+    };
 
     const btnPlay = document.getElementById('cat-ctx-play');
     if (btnPlay) {
@@ -4188,7 +4296,8 @@ class UIController {
       btnRename.onclick = () => {
         menu.style.display = 'none';
         if (this.selectedCategoryForMenu) {
-          this.openCategoryModal(this.selectedCategoryForMenu.id, this.selectedCategoryForMenu.name);
+          this.openCategoryModal(this.selectedCategoryForMenu.id, this.selectedCategoryForMenu.name,
+            this.categoryContextIsGroup ? 'group' : 'category', this.selectedCategoryForMenu.groupId);
         }
       };
     }
@@ -4197,7 +4306,7 @@ class UIController {
     if (btnClearTracks) {
       btnClearTracks.onclick = async () => {
         menu.style.display = 'none';
-        if (this.selectedCategoryForMenu) {
+        if (this.selectedCategoryForMenu && !this.categoryContextIsGroup) {
           const cat = this.selectedCategoryForMenu;
           const ok = await this.showGlassConfirm({
             title: '清空分类歌曲',
@@ -4229,21 +4338,42 @@ class UIController {
             danger: true
           });
           if (ok) {
-            await window.glasswaveAPI.deleteCategory(cat.id);
-            if (this.currentSubView === `category:${cat.id}`) {
+            if (this.categoryContextIsGroup) {
+              const childCount = this.categories.filter(c => c.groupId === cat.id).length;
+              const secondOk = await this.showGlassConfirm({
+                title: '再次确认删除一级分类',
+                message: `将删除【${cat.name}】及其 ${childCount} 个二级分类。确定继续吗？`,
+                subtext: '歌曲文件与曲库中的歌曲均保留。',
+                confirmText: '删除一级及二级分类',
+                danger: true
+              });
+              if (!secondOk) return;
+              await window.glasswaveAPI.deleteCategoryGroup(cat.id);
+            } else {
+              await window.glasswaveAPI.deleteCategory(cat.id);
+            }
+            if (this.categoryContextIsGroup || this.currentSubView === `category:${cat.id}`) {
               this.switchView('library', 'all');
             }
             await this.loadCategories();
+            this.setTracks(await window.glasswaveAPI.getTracks());
           }
         }
       };
     }
   }
 
-  openCategoryContextMenu(cat, clientX, clientY) {
+  openCategoryContextMenu(cat, clientX, clientY, isGroup = false) {
     const menu = document.getElementById('category-context-menu');
     if (!menu) return;
     this.selectedCategoryForMenu = cat;
+    this.categoryContextIsGroup = isGroup;
+    for (const id of ['cat-ctx-play', 'cat-ctx-add-queue', 'cat-ctx-clear-tracks']) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = isGroup ? 'none' : 'flex';
+    }
+    const addChild = document.getElementById('cat-ctx-add-child');
+    if (addChild) addChild.style.display = isGroup ? 'flex' : 'none';
 
     // Close any other open context menus
     const trackMenu = document.getElementById('glass-context-menu');
@@ -4251,38 +4381,27 @@ class UIController {
 
     menu.style.display = 'block';
 
-    const menuWidth = 200;
-    const menuHeight = 220;
-    let x = clientX;
-    let y = clientY;
-
-    if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 12;
-    if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 12;
-
-    menu.style.left = `${Math.max(10, x)}px`;
-    menu.style.top = `${Math.max(10, y)}px`;
+    this.placeMenuInViewport(menu, clientX, clientY);
   }
 
-  playCategory(cat) {
-    if (!cat || !cat.trackPaths || cat.trackPaths.length === 0) {
-      alert(`分类【${cat.name}】中暂无歌曲`);
+  playCategory(catOrId) {
+    const cat = typeof catOrId === 'string' ? this.categories.find(c => c.id === catOrId) : catOrId;
+    if (!cat) return;
+    const catTracks = this.allTracks.filter(t => (cat.trackPaths || []).includes(t.path));
+    if (!catTracks.length) {
+      this.showToast(`分类【${cat.name}】中暂无歌曲`);
       return;
     }
-    const catTracks = this.tracks.filter(t => cat.trackPaths.includes(t.path));
-    if (catTracks.length > 0) {
-      this.audioEngine.playbackQueue = [...catTracks];
-      this.audioEngine.playTrack(catTracks[0], 0);
-      this.renderQueue();
-    } else {
-      alert(`未能找到分类【${cat.name}】对应的音频文件`);
-    }
+    this.audioEngine.setQueue(catTracks, 0);
+    this.audioEngine.loadTrack(catTracks[0], true);
+    this.renderQueue();
   }
 
   addCategoryToQueue(cat) {
     if (!cat || !cat.trackPaths || cat.trackPaths.length === 0) return;
-    const catTracks = this.tracks.filter(t => cat.trackPaths.includes(t.path));
+    const catTracks = this.allTracks.filter(t => cat.trackPaths.includes(t.path));
     if (catTracks.length > 0) {
-      this.audioEngine.addToQueue(catTracks);
+      catTracks.forEach(track => this.audioEngine.addToQueue(track));
       this.renderQueue();
     }
   }
@@ -6423,6 +6542,7 @@ class UIController {
   // =========================================================================
   showGlassConfirm({ title = '确认操作', message = '确定要继续此操作吗？', subtext = '', confirmText = '确认删除', cancelText = '取消', danger = true } = {}) {
     return new Promise((resolve) => {
+      if (this.confirmHideTimer) clearTimeout(this.confirmHideTimer);
       const backdrop = document.getElementById('glass-confirm-dialog');
       const titleEl = document.getElementById('confirm-title');
       const msgEl = document.getElementById('confirm-msg');
@@ -6456,8 +6576,9 @@ class UIController {
         if (resolved) return;
         resolved = true;
         backdrop.classList.remove('active');
-        setTimeout(() => {
-          backdrop.style.display = 'none';
+        this.confirmHideTimer = setTimeout(() => {
+          if (!backdrop.classList.contains('active')) backdrop.style.display = 'none';
+          this.confirmHideTimer = null;
         }, 220);
         document.removeEventListener('keydown', onKeyDown);
         backdrop.onclick = null;

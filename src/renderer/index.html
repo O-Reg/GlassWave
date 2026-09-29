@@ -178,6 +178,7 @@
             </div>
 
             <div class="popover-divider"></div>
+            <div class="popover-item" id="pop-manage-all-tags"><span>管理所有标签…</span></div>
             <div class="popover-item" id="pop-scan-library">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
               <span>立即扫描监控目录</span>
@@ -398,9 +399,9 @@
             <div class="category-header">
               <div class="category-title-toggle" id="btn-toggle-categories" title="展开/收起我的分类">
                 <svg class="chevron-icon" id="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                <span>我的分类</span>
+                <span>分类</span>
               </div>
-              <button class="btn-add-cat-icon" id="btn-create-category-quick" title="新建分类">+</button>
+              <button class="btn-add-cat-icon" id="btn-create-category-quick" title="新建一级分类">+</button>
             </div>
             <div class="category-list" id="sidebar-category-list">
               <!-- Dynamic Category Items -->
@@ -1808,6 +1809,7 @@
       </div>
       <div class="modal-body">
         <input type="text" id="cat-name-input" class="glass-modal-input" placeholder="输入分类名称（例如：运动、黑暗、视频配乐...）" maxlength="24">
+        <select id="cat-parent-group" class="glass-modal-input" style="margin-top:12px;"></select>
       </div>
       <div class="modal-footer">
         <button class="glass-pill-btn" id="btn-cancel-cat">取消</button>
@@ -1940,6 +1942,17 @@
     </div>
   </div>
 
+  <div class="glass-modal-backdrop" id="glass-all-tags-modal" style="display:none;">
+    <div class="glass-modal-card modal-compact">
+      <div class="modal-header"><h3>管理所有标签</h3><button class="modal-close-btn" id="btn-close-all-tags">&times;</button></div>
+      <div class="modal-body">
+        <p class="tag-manager-hint">删除标签会从所有歌曲中移除；仅由歌曲产生的标签，在最后一首歌取消后会自动消失。</p>
+        <div id="all-tags-list" class="all-tags-list"></div>
+        <div class="add-custom-tag-row"><input type="text" id="all-tags-new-input" class="glass-modal-input" placeholder="新标签名称" maxlength="20"><button class="glass-pill-btn" id="btn-add-all-tag">添加</button></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Fullscreen Drag-and-Drop Overlay -->
   <div class="drag-drop-full-overlay" id="drag-drop-overlay" style="display:none;">
     <div class="drag-drop-content">
@@ -1977,7 +1990,7 @@
     </div>
     <div class="menu-item menu-parent" id="ctx-category-parent">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-      <span>添加到分类 &gt;</span>
+      <span>移到分类 &gt;</span>
       <div class="menu-submenu" id="ctx-category-submenu">
         <!-- Submenu items populated dynamically -->
       </div>
@@ -2013,6 +2026,7 @@
 
   <!-- Dedicated Category Right-Click Context Menu (Requirement 2) -->
   <div id="category-context-menu" class="glass-context-menu" style="display: none;">
+    <div class="menu-item" id="cat-ctx-add-child"><span>新建二级分类…</span></div>
     <div class="menu-item" id="cat-ctx-play">
       <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
       <span>播放该分类全部歌曲</span>

@@ -16,8 +16,10 @@ class LibraryDatabase {
     this.hiddenPaths = new Set();
     this.favorites = new Set();
     this.categories = []; // [ { id, name, trackPaths: [], order: 0 } ]
+    this.categoryGroups = [];
     this.history = []; // [ { path, playedAt } ]
-    this.customTags = new Set();
+    this.customTags = new Set(); // explicitly created tags; song-only tags are derived from tracks
+    this.hiddenPresetTags = new Set();
 
     this.config = {
       autoplayOnLaunch: true,
@@ -34,8 +36,11 @@ class LibraryDatabase {
       hiddenTrackPaths: [],
       autoAddDroppedToLibrary: false,
       categories: [],
+      categoryGroups: [],
       favorites: [],
       customTags: [],
+      manualTags: [],
+      hiddenPresetTags: [],
       history: [],
       savedQueue: []
     };
@@ -59,12 +64,14 @@ class LibraryDatabase {
           this.categories = this.config.categories;
           savedCategories = Object.prototype.hasOwnProperty.call(JSON.parse(raw), 'categories');
         }
+        if (Array.isArray(this.config.categoryGroups)) {
+          this.categoryGroups = this.config.categoryGroups;
+        }
         if (Array.isArray(this.config.history)) {
           this.history = this.config.history;
         }
-        if (Array.isArray(this.config.customTags)) {
-          this.customTags = new Set(this.config.customTags);
-        }
+        if (Array.isArray(this.config.manualTags)) this.customTags = new Set(this.config.manualTags);
+        if (Array.isArray(this.config.hiddenPresetTags)) this.hiddenPresetTags = new Set(this.config.hiddenPresetTags);
       }
     } catch (e) {
       console.warn('Failed to load config:', e);
@@ -79,6 +86,11 @@ class LibraryDatabase {
         { id: 'cat_classical', name: '古典音乐', trackPaths: [], order: 3 }
       ];
     }
+    if (!this.categoryGroups.length && !Object.prototype.hasOwnProperty.call(this.config, 'categoryGroupsSaved')) {
+      this.categoryGroups = [{ id: 'group_default', name: '我的分类', order: 0 }];
+    }
+    const fallbackGroupId = this.categoryGroups[0]?.id;
+    this.categories.forEach(cat => { if (!cat.groupId) cat.groupId = fallbackGroupId; });
 
     try {
       if (fs.existsSync(this.dbFile)) {
@@ -113,8 +125,12 @@ class LibraryDatabase {
       this.config.hiddenTrackPaths = Array.from(this.hiddenPaths);
       this.config.favorites = Array.from(this.favorites);
       this.config.categories = this.categories;
+      this.config.categoryGroups = this.categoryGroups;
+      this.config.categoryGroupsSaved = true;
       this.config.history = this.history.slice(0, 100);
       this.config.customTags = Array.from(this.customTags);
+      this.config.manualTags = Array.from(this.customTags);
+      this.config.hiddenPresetTags = Array.from(this.hiddenPresetTags);
 
       const tempConf = `${this.configFile}.tmp`;
       fs.writeFileSync(tempConf, JSON.stringify(this.config), 'utf8');
@@ -265,15 +281,45 @@ class LibraryDatabase {
     return this.categories;
   }
 
-  addCategory(name) {
+  getCategoryGroups() { return this.categoryGroups; }
+
+  addCategoryGroup(name) {
+    const clean = String(name || '').trim();
+    if (!clean || this.categoryGroups.some(g => g.name.toLowerCase() === clean.toLowerCase())) return this.categoryGroups;
+    this.categoryGroups.push({ id: `group_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, name: clean, order: this.categoryGroups.length });
+    this.save();
+    return this.categoryGroups;
+  }
+
+  renameCategoryGroup(id, name) {
+    const clean = String(name || '').trim();
+    const group = this.categoryGroups.find(g => g.id === id);
+    if (group && clean && !this.categoryGroups.some(g => g.id !== id && g.name.toLowerCase() === clean.toLowerCase())) {
+      group.name = clean;
+      this.save();
+    }
+    return this.categoryGroups;
+  }
+
+  deleteCategoryGroup(id) {
+    if (!this.categoryGroups.some(g => g.id === id)) return this.categoryGroups;
+    this.categories = this.categories.filter(c => c.groupId !== id);
+    this.categoryGroups = this.categoryGroups.filter(g => g.id !== id);
+    this.save();
+    return this.categoryGroups;
+  }
+
+  addCategory(name, groupId) {
     const trimmed = (name || '').trim();
-    if (!trimmed) return this.categories;
-    const existing = this.categories.find(c => c.name.toLowerCase() === trimmed.toLowerCase());
+    const targetGroupId = groupId || this.categoryGroups[0]?.id;
+    if (!trimmed || !this.categoryGroups.some(g => g.id === targetGroupId)) return this.categories;
+    const existing = this.categories.find(c => c.groupId === targetGroupId && c.name.toLowerCase() === trimmed.toLowerCase());
     if (existing) return this.categories;
 
     const newCat = {
       id: `cat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       name: trimmed,
+      groupId: targetGroupId,
       trackPaths: [],
       order: this.categories.length
     };
@@ -284,7 +330,7 @@ class LibraryDatabase {
 
   renameCategory(catId, newName) {
     const cat = this.categories.find(c => c.id === catId);
-    if (cat && newName && newName.trim()) {
+    if (cat && newName && newName.trim() && !this.categories.some(c => c.id !== catId && c.groupId === cat.groupId && c.name.toLowerCase() === newName.trim().toLowerCase())) {
       cat.name = newName.trim();
       this.save();
     }
@@ -334,7 +380,7 @@ class LibraryDatabase {
     if (cat && Array.isArray(trackPaths)) {
       const set = new Set(cat.trackPaths || []);
       trackPaths.forEach(p => {
-        if (p) set.add(p);
+        if (p && this.tracks.has(p)) set.add(p);
       });
       cat.trackPaths = Array.from(set);
       this.save();
@@ -344,6 +390,19 @@ class LibraryDatabase {
 
   addToCategory(catId, trackPaths) {
     return this.addTracksToCategory(catId, trackPaths);
+  }
+
+  moveTracksToCategory(catId, trackPaths) {
+    const target = this.categories.find(c => c.id === catId);
+    if (!target || !Array.isArray(trackPaths)) return this.getAllTracks();
+    const moving = new Set(trackPaths.filter(p => this.tracks.has(p)));
+    if (!moving.size) return this.getAllTracks();
+    for (const cat of this.categories) {
+      cat.trackPaths = (cat.trackPaths || []).filter(p => !moving.has(p));
+    }
+    target.trackPaths = Array.from(new Set([...(target.trackPaths || []), ...moving]));
+    this.save();
+    return this.getAllTracks();
   }
 
   removeTracksFromCategory(catId, trackPaths) {
@@ -413,7 +472,6 @@ class LibraryDatabase {
     const t = this.tracks.get(trackPath);
     if (t && Array.isArray(tags)) {
       t.tags = Array.from(new Set(tags.map(s => String(s).trim()).filter(Boolean)));
-      t.tags.forEach(tag => this.customTags.add(tag));
       this.save();
     }
     return this.getAllTracks();
@@ -423,8 +481,6 @@ class LibraryDatabase {
     if (!Array.isArray(trackPaths)) return this.getAllTracks();
     const addSet = new Set(addTags.map(s => String(s).trim()).filter(Boolean));
     const removeSet = new Set(removeTags.map(s => String(s).trim()).filter(Boolean));
-
-    addSet.forEach(tag => this.customTags.add(tag));
 
     trackPaths.forEach(p => {
       const t = this.tracks.get(p);
@@ -440,14 +496,19 @@ class LibraryDatabase {
   }
 
   getCustomTags() {
-    return Array.from(this.customTags);
+    const tags = new Set(this.customTags);
+    this.tracks.forEach(t => (t.tags || []).forEach(tag => tags.add(tag)));
+    return Array.from(tags);
   }
+
+  getHiddenPresetTags() { return Array.from(this.hiddenPresetTags); }
 
   addCustomTag(tag) {
     if (!tag || typeof tag !== 'string') return this.getCustomTags();
     const clean = tag.trim();
     if (!clean) return this.getCustomTags();
     this.customTags.add(clean);
+    this.hiddenPresetTags.delete(clean);
     this.save();
     return this.getCustomTags();
   }
@@ -456,6 +517,7 @@ class LibraryDatabase {
     if (!tag) return this.getCustomTags();
     const clean = String(tag).trim();
     this.customTags.delete(clean);
+    this.hiddenPresetTags.add(clean);
     // Also remove from tracks if present
     this.tracks.forEach(t => {
       if (Array.isArray(t.tags)) {
