@@ -4,7 +4,7 @@ GlassWave 是一款 Windows 本地音乐播放器，提供波形与频谱视效�
 
 ## 下载
 
-到 [Releases](../../releases) 下载 `GlassWave-v1.2.1-win-x64.zip`，解压后运行 `GlassWave.exe`。便携版的设置和曲库索引保存在程序旁的 `data` 文件夹；更新程序时保留这个文件夹。下载包内置 O Reg 的《The Pattern》及专属封面，作为首次启动的示例曲目。完整功能与 1.2.1 更新见 [更新说明](RELEASE_NOTES_1.2.1.md)。
+到 [Releases](../../releases) 下载 `GlassWave-v1.2.2-win-x64.zip`，解压后运行 `GlassWave.exe`。便携版的设置和曲库索引保存在程序旁的 `data` 文件夹；更新程序时保留这个文件夹。下载包内置 O Reg 的《The Pattern》及专属封面，作为首次启动的示例曲目。完整功能介绍见 [功能与界面预览](RELEASE_NOTES_1.2.1.md)，本次修复见 [1.2.2 更新说明](RELEASE_NOTES_1.2.2.md)。
 
 ## 从源码运行
 

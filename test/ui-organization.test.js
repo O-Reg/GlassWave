@@ -18,6 +18,102 @@ function makeUI() {
   return { ui, handlers, context };
 }
 
+function makeImportUI() {
+  const { ui, context } = makeUI();
+  const events = {};
+  const scans = [];
+  const overlay = { style: { display: 'none' } };
+  context.document.getElementById = id => id === 'drag-drop-overlay' ? overlay : null;
+  context.window.addEventListener = (name, handler) => { events[name] = handler; };
+  context.window.glasswaveAPI = {
+    scanDroppedItems: async paths => { scans.push(Array.from(paths)); return { tracks: [] }; }
+  };
+  ui.bindDragAndDropImport();
+  const event = (types, files = []) => ({
+    prevented: false,
+    preventDefault() { this.prevented = true; },
+    dataTransfer: { types, files, dropEffect: 'move', getData() { throw Error('protected drag payload'); } }
+  });
+  return { ui, events, scans, overlay, event };
+}
+
+test('internal library and queue drags never show import UI or change drop effects', async () => {
+  const { events, scans, overlay, event } = makeImportUI();
+  for (const types of [['application/x-glasswave-tracks', 'text/plain', 'Files'], ['text/queue-index', 'Files']]) {
+    const drag = event(types, [{ path: 'C:\\music\\existing.wav' }]);
+    events.dragenter(drag);
+    events.dragover(drag);
+    assert.equal(overlay.style.display, 'none');
+    assert.equal(drag.dataTransfer.dropEffect, 'move');
+    await events.drop(drag);
+  }
+  // Any drag initiated inside this renderer, including image drags, is internal.
+  events.dragstart();
+  const image = event(['Files'], [{ path: 'C:\\art\\cover.png' }]);
+  events.dragenter(image);
+  events.dragover(image);
+  await events.drop(image);
+  assert.equal(overlay.style.display, 'none');
+  assert.equal(scans.length, 0);
+  events.dragend();
+  const external = event(['Files']);
+  events.dragenter(external);
+  assert.equal(overlay.style.display, 'flex');
+});
+
+test('external file and folder drags show import UI while text drags do not', async () => {
+  const { events, scans, overlay, event } = makeImportUI();
+  const text = event(['text/plain', 'text/uri-list']);
+  events.dragenter(text);
+  events.dragover(text);
+  assert.equal(overlay.style.display, 'none');
+  // Files are not readable until drop, so Files type alone must show the hint.
+  const drag = event(['Files']);
+  events.dragenter(drag);
+  events.dragenter(drag);
+  events.dragover(drag);
+  assert.equal(overlay.style.display, 'flex');
+  assert.equal(drag.dataTransfer.dropEffect, 'copy');
+  events.dragleave(drag);
+  assert.equal(overlay.style.display, 'flex');
+  events.dragleave(drag);
+  assert.equal(overlay.style.display, 'none');
+  events.dragenter(drag);
+  await events.drop(event(['Files'], [{ path: 'C:\\music\\new.wav' }, { path: 'C:\\music\\album' }]));
+  assert.deepEqual(scans, [['C:\\music\\new.wav', 'C:\\music\\album']]);
+  assert.equal(overlay.style.display, 'none');
+});
+
+test('dragging selected library songs retains the full category payload', () => {
+  const { ui, handlers } = makeUI();
+  ui.filteredTracks = [{ path: 'one.wav' }, { path: 'two.wav' }];
+  ui.selectedTrackPaths = new Set(['one.wav', 'two.wav']);
+  ui.bindTrackListEvents();
+  const payloads = new Map();
+  handlers.dragstart({
+    target: { closest: () => ({ dataset: { index: '0' } }) },
+    dataTransfer: { setData: (type, data) => payloads.set(type, data) }
+  });
+  assert.deepEqual(JSON.parse(payloads.get('text/plain')), ['one.wav', 'two.wav']);
+  assert.deepEqual(JSON.parse(payloads.get('application/x-glasswave-tracks')), ['one.wav', 'two.wav']);
+});
+
+test('double clicks on search decorations or audio specs do not fullscreen the window', () => {
+  const { ui, context } = makeUI();
+  let doubleClick;
+  let fullscreen = 0;
+  context.window.glasswaveAPI = {};
+  context.document.getElementById = () => ({ addEventListener: (_, handler) => { doubleClick = handler; } });
+  ui.toggleVisualizerFullscreen = () => { fullscreen++; };
+  ui.bindTitlebarDoubleClick();
+  for (const control of ['.search-cluster', '.glass-hifi-popover', '.hifi-badge-wrap']) {
+    doubleClick({ target: { closest: selectors => selectors.includes(control) ? {} : null } });
+  }
+  assert.equal(fullscreen, 0);
+  doubleClick({ target: { closest: () => null }, preventDefault() {}, stopPropagation() {} });
+  assert.equal(fullscreen, 1);
+});
+
 test('opening visual settings in Zen mode keeps the bottom dock visible', () => {
   const { ui, context } = makeUI();
   const classes = initial => {

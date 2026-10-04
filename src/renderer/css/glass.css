@@ -140,7 +140,7 @@ body.is-maximized .glass-app-shell {
   position: relative;
   z-index: 50;
   -webkit-app-region: drag;
-  cursor: grab;
+  cursor: default;
 }
 
 .titlebar-left {
@@ -339,6 +339,21 @@ body.is-maximized .glass-app-shell {
   max-width: 520px;
   width: 100%;
   justify-content: center;
+}
+
+/* Explicit no-drag holes for controls nested inside the native titlebar.
+   Include popover content and decorative children, not just the input/badge. */
+.search-cluster,
+.search-cluster *,
+.hifi-badge-wrap,
+.hifi-badge-wrap *,
+.glass-hifi-popover,
+.glass-hifi-popover * {
+  -webkit-app-region: no-drag !important;
+}
+.search-cluster,
+.glass-hifi-popover {
+  cursor: default;
 }
 
 .glass-search-box {

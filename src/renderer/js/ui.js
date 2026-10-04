@@ -255,7 +255,7 @@ class UIController {
     const titlebar = document.getElementById('titlebar');
     if (titlebar && window.glasswaveAPI) {
       titlebar.addEventListener('dblclick', (e) => {
-        if (e.target && (e.target.tagName === 'INPUT' || e.target.closest('button, .hifi-badge-wrap, .win-btn'))) return;
+        if (e.target && e.target.closest('button, input, select, textarea, .search-cluster, .hifi-badge-wrap, .glass-hifi-popover, .win-btn')) return;
         e.preventDefault();
         e.stopPropagation();
         this.toggleVisualizerFullscreen();
@@ -1527,14 +1527,39 @@ class UIController {
     const rememberCheckbox = document.getElementById('drop-remember-pref');
 
     let dragCounter = 0;
+    let internalDragActive = false;
+    const hideImportOverlay = () => {
+      dragCounter = 0;
+      if (overlay) overlay.style.display = 'none';
+    };
+    const isExternalFileDrag = (e) => {
+      if (internalDragActive || !e.dataTransfer) return false;
+      const types = Array.from(e.dataTransfer.types || []);
+      if (types.includes('application/x-glasswave-tracks') || types.includes('text/queue-index')) return false;
+      // During dragenter/dragover, files are protected and usually empty.
+      return types.includes('Files') || e.dataTransfer.files?.length > 0;
+    };
+
+    // A drag originating in this renderer is never a file import, even if
+    // Chromium supplies a Files payload for an image or link.
+    window.addEventListener('dragstart', () => {
+      internalDragActive = true;
+      hideImportOverlay();
+    }, true);
+    window.addEventListener('dragend', () => {
+      internalDragActive = false;
+      hideImportOverlay();
+    }, true);
 
     window.addEventListener('dragenter', (e) => {
+      if (!isExternalFileDrag(e)) return;
       e.preventDefault();
       dragCounter++;
       if (overlay) overlay.style.display = 'flex';
     });
 
     window.addEventListener('dragleave', (e) => {
+      if (internalDragActive || dragCounter === 0) return;
       e.preventDefault();
       dragCounter--;
       if (dragCounter <= 0) {
@@ -1544,14 +1569,16 @@ class UIController {
     });
 
     window.addEventListener('dragover', (e) => {
+      if (!isExternalFileDrag(e)) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
     });
 
     window.addEventListener('drop', async (e) => {
       e.preventDefault();
-      dragCounter = 0;
-      if (overlay) overlay.style.display = 'none';
+      const externalFileDrag = isExternalFileDrag(e);
+      hideImportOverlay();
+      if (!externalFileDrag) return;
 
       const files = Array.from(e.dataTransfer.files);
       if (files.length === 0) return;
@@ -3353,7 +3380,9 @@ class UIController {
       if (this.selectedTrackPaths.has(track.path)) {
         paths = Array.from(this.selectedTrackPaths);
       }
-      e.dataTransfer.setData('text/plain', JSON.stringify(paths));
+      const payload = JSON.stringify(paths);
+      e.dataTransfer.setData('application/x-glasswave-tracks', payload);
+      e.dataTransfer.setData('text/plain', payload);
     });
   }
 
