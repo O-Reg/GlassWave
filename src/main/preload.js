@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('glasswaveAPI', {
+  loadLyrics: track => ipcRenderer.invoke('lyrics-load', track),
+  importLyrics: track => ipcRenderer.invoke('lyrics-import', track),
+  importLyricsTranslation: track => ipcRenderer.invoke('lyrics-translation-import', track),
+  chooseLyricsFolder: () => ipcRenderer.invoke('lyrics-folder'),
   cacheSkin: (data) => ipcRenderer.invoke('skin-cache', data),
   exportSkinFile: (data) => ipcRenderer.invoke('skin-export-file', data),
   importSkinFile: () => ipcRenderer.invoke('skin-import-file'),

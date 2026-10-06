@@ -297,6 +297,16 @@ class MetadataParser {
   }
 
   // Heuristic extraction for artist, title, and album from filename and folders
+  needsTitleRefresh(track) {
+    if (!track || track.titleNamingVersion >= 2) return false;
+    const raw = path.basename(track.path, path.extname(track.path));
+    const parts = raw.includes(' - ') ? raw.split(' - ') : raw.split('-');
+    if (parts.length < 2) return false;
+    const guessed = parts.slice(1).join(raw.includes(' - ') ? ' - ' : '-').trim();
+    const ambiguous = !raw.includes(' - ') || /^\d+(?:\s*[-.]\s*\d+)*$/.test(guessed);
+    return ambiguous && (track.title === guessed || track.title === guessed.replace(/^(\d{1,3}[\.\s\-_]+)/, '').trim());
+  }
+
   extractMetadataHeuristics(filePath, common, native) {
     const rawBaseName = path.basename(filePath, path.extname(filePath));
     const parentDirName = path.basename(path.dirname(filePath));
@@ -332,15 +342,11 @@ class MetadataParser {
 
     if (rawBaseName.includes(' - ')) {
       const parts = rawBaseName.split(' - ');
-      if (parts.length >= 2) {
+      // A numeric suffix is often part of a song name (ALL - 4), not a title
+      // with an artist prefix. Bare hyphens also belong to names like all-4.
+      if (parts.length >= 2 && !/^\d+(?:\s*[-.]\s*\d+)*$/.test(parts.slice(1).join(' - ').trim())) {
         parsedArtist = parts[0].trim();
         parsedTitle = parts.slice(1).join(' - ').trim();
-      }
-    } else if (rawBaseName.includes('-')) {
-      const parts = rawBaseName.split('-');
-      if (parts.length === 2) {
-        parsedArtist = parts[0].trim();
-        parsedTitle = parts[1].trim();
       }
     }
 
@@ -428,6 +434,7 @@ class MetadataParser {
         id: crypto.createHash('md5').update(filePath).digest('hex'),
         path: filePath,
         title,
+        titleNamingVersion: 2,
         artist,
         album,
         albumArtist,
@@ -450,6 +457,7 @@ class MetadataParser {
         id: crypto.createHash('md5').update(filePath).digest('hex'),
         path: filePath,
         title: rawBase,
+        titleNamingVersion: 2,
         artist: '未知艺术家',
         album: 'GlassWave Archive',
         duration: 0,

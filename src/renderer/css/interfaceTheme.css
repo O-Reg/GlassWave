@@ -115,8 +115,17 @@ body.ui-light-glass #eq-preset-context-menu .context-item.danger:hover { backgro
 body:not(.custom-wallpaper-active):not(.mini-bar-mode) #ambient-canvas { visibility:visible!important; opacity:calc(1 - var(--desktop-reveal,0))!important; }
 
 html.window-animation-paused *, html.window-animation-paused *::before, html.window-animation-paused *::after { animation-play-state:paused!important; }
-/* The native shape and renderer share a 14 DIP radius in every window mode. */
-body #app-shell, body.window-glass-active #app-shell { border-radius:14px!important; overflow:hidden!important; }
+/* Round only floating windows; this stylesheet loads after controls.css. */
+body:not(.window-fullscreen):not(.is-maximized) #app-shell { border-radius:14px!important; overflow:hidden!important; }
 
 /* The transparent rounded edge is drawn once by the native window shape. */
 body #app-shell, body.window-glass-active #app-shell { border:0!important; outline:0!important; box-shadow:none!important; }
+
+/* Final theme override: fullscreen skins must not reintroduce corner clipping. */
+body:is(.window-fullscreen,.is-maximized) #app-shell {
+ border-radius:0!important;clip-path:none!important;border:0!important;outline:0!important;box-shadow:none!important;transition:none!important;
+}
+body:is(.window-fullscreen,.is-maximized) #app-shell > :is(.glass-titlebar,.glass-player-bar),
+body:is(.window-fullscreen,.is-maximized) #app-shell .glass-sidebar {
+ border-radius:0!important;
+}

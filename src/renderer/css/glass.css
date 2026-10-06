@@ -335,16 +335,23 @@ body.is-maximized .glass-app-shell {
   align-items: center;
   gap: 8px;
   position: relative;
-  -webkit-app-region: no-drag;
+  -webkit-app-region: drag;
   max-width: 520px;
   width: 100%;
   justify-content: center;
 }
 
-/* Explicit no-drag holes for controls nested inside the native titlebar.
-   Include popover content and decorative children, not just the input/badge. */
-.search-cluster,
-.search-cluster *,
+/* The layout wrapper includes empty space and gaps: keep those draggable.
+   Only the visible controls and their popovers exclude native window dragging. */
+.search-cluster {
+  -webkit-app-region: drag !important;
+}
+.glass-search-box,
+.glass-search-box *,
+.search-more-btn,
+.search-more-btn *,
+.search-more-popover,
+.search-more-popover *,
 .hifi-badge-wrap,
 .hifi-badge-wrap *,
 .glass-hifi-popover,
@@ -2278,9 +2285,16 @@ body.zen-mode.zen-dragging-window .player-stage {
   background: linear-gradient(to right, var(--accent-primary, #60a5fa) 0%, var(--accent-primary, #60a5fa) var(--val-pct, 80%), rgba(255, 255, 255, 0.18) var(--val-pct, 80%), rgba(255, 255, 255, 0.18) 100%) !important;
 }
 
-/* Ensure interactive controls inside revealed titlebar, sidebars, player-bar, popovers, and icon picker NEVER trigger drag */
+/* Keep titlebar layout gaps draggable in Zen library views as well.
+   Exclude actual controls, never the whole titlebar subtree. */
 body.zen-mode .glass-titlebar,
-body.zen-mode .glass-titlebar *,
+body.zen-mode .titlebar-left,
+body.zen-mode .titlebar-center,
+body.zen-mode .search-cluster {
+  -webkit-app-region: drag !important;
+}
+
+/* Interactive controls inside sidebars, player-bar, popovers and icon picker never drag. */
 body.zen-mode .zen-floating-toggle,
 body.zen-mode .glass-sidebar,
 body.zen-mode .glass-sidebar *,

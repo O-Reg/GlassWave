@@ -16,12 +16,13 @@ function attach(win) {
     const bounds = win.getBounds();
     const { width, height } = bounds;
     const scale = require('electron').screen.getDisplayMatching(bounds).scaleFactor;
-    const next = `${width}:${height}:${scale}`;
+    const square = win.isFullScreen() || win.isMaximized();
+    const next = `${width}:${height}:${scale}:${square}`;
     if (!force && next === signature) return;
-    win.setShape(roundedShape(width, height));
+    win.setShape(square ? [{ x: 0, y: 0, width, height }] : roundedShape(width, height));
     signature = next;
   };
-  for (const event of ['resize', 'restore', 'show', 'enter-full-screen', 'leave-full-screen']) win.on(event, () => refresh(true));
+  for (const event of ['resize', 'restore', 'show', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) win.on(event, () => refresh(true));
   // A monitor change may change device scale without changing DIP dimensions.
   win.on('move', () => refresh());
   refresh(true);

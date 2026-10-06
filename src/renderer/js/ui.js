@@ -1051,7 +1051,7 @@ class UIController {
         el.closest('.glass-eq-modal') ||
         el.closest('.category-icon-picker') ||
         el.closest('#category-context-menu, #glass-context-menu') ||
-        el.closest('.lyrics-scroll-container') ||
+        el.closest('.lyrics-scroll-container, .lyrics-settings-panel') ||
         el.closest('input[type="range"]')
       ) {
         return;
@@ -3345,7 +3345,10 @@ class UIController {
       const idx = row ? Number(row.dataset.index) : -1;
       const track = this.filteredTracks[idx];
       if (!track) return;
-      this.audioEngine.setQueue(this.filteredTracks, idx);
+      const sourceView = this.searchQuery ? (this._prevSubViewBeforeSearch || this.currentSubView) : this.currentSubView;
+      const scope = sourceView?.startsWith('category:')
+        ? { type: 'category', categoryId: sourceView.slice('category:'.length) } : { type: 'library' };
+      this.audioEngine.setQueue(this.filteredTracks, idx, scope);
       this.audioEngine.loadTrack(track, true);
     });
 
@@ -4504,7 +4507,7 @@ class UIController {
       this.showToast(`分类【${cat.name}】中暂无歌曲`);
       return;
     }
-    this.audioEngine.setQueue(catTracks, 0);
+    this.audioEngine.setQueue(catTracks, 0, { type: 'category', categoryId: cat.id });
     this.audioEngine.loadTrack(catTracks[0], true);
     this.renderQueue();
   }
@@ -5788,7 +5791,9 @@ class UIController {
   canDragWindowFromTarget(target) {
     if (!target || typeof target.closest !== 'function' || !target.closest('#app-shell')) return false;
     return !target.closest([
-      '#titlebar', 'button', 'input', 'select', 'textarea', 'label', 'a', '[role="button"]', '[contenteditable="true"]',
+      'button', 'input', 'select', 'textarea', 'label', 'a', '[role="button"]', '[contenteditable="true"]',
+      '.glass-search-box', '.search-more-popover', '.glass-hifi-popover',
+      '.lyrics-settings-panel', '.lyrics-stage.is-positioning',
       '.glass-sidebar', '.glass-player-bar', '.zen-floating-toggle', '.glass-queue-drawer', '.glass-eq-modal',
       '.glass-settings-drawer', '#view-settings', '#view-visualizer-drawer', '.category-icon-picker',
       '#category-context-menu', '#glass-context-menu', '.glass-confirm-dialog', '.glass-modal',
@@ -5903,7 +5908,8 @@ class UIController {
         const settingsDrawer = document.getElementById('view-settings');
         const isVisualOpen = visualDrawer?.classList.contains('open');
         const isSettingsOpen = settingsDrawer?.classList.contains('open');
-        const isInteractiveActive = isDrawerOpen || isEqOpen || isVisualOpen || isSettingsOpen || isDraggingBottom || isFocusInsidePlayerBar;
+        const isLyricsOpen = document.body.classList.contains('lyrics-settings-open');
+        const isInteractiveActive = isDrawerOpen || isEqOpen || isVisualOpen || isSettingsOpen || isLyricsOpen || isDraggingBottom || isFocusInsidePlayerBar;
         document.body.classList.toggle('zen-interactive-open', isInteractiveActive);
 
         // Super-wide trigger zone: 220px minimum or 28% of window height (over 2.5x the player bar height)
@@ -5957,6 +5963,7 @@ class UIController {
     };
 
     let zenHoverFrame=null,zenHoverPoint=null;
+    this.refreshZenPointerState = () => handleZenMouseMove(zenHoverPoint || { clientX: window.innerWidth / 2, clientY: 0 });
     window.addEventListener('mousemove',e=>{
       if(!document.body.classList.contains('zen-mode')||document.body.classList.contains('zen-switching'))return;
       zenHoverPoint={clientX:e.clientX,clientY:e.clientY};

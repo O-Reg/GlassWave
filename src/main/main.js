@@ -116,6 +116,7 @@ function scheduleLibraryMonitoring() {
   // Chokidar scans each folder on ready. Starting it after first paint avoids
   // competing with renderer initialization and avoids a duplicate startup scan.
   setTimeout(() => {
+    scanner?.refreshAmbiguousTitles().catch(error => console.warn('Title refresh:', error.message));
     for (const folder of new Set(libraryWatchFolders)) {
       if (isQuitting) break;
       scanner?.watchFolder(folder);
@@ -608,6 +609,45 @@ function createWindow() {
   });
 
   let cursorMoveTimer=null, cursorMoveOrigin=null, cursorMoveStart=null, cursorMoveApplied=null;
+  let nativeMoveStart = null;
+  function updateSnapPreview(cursor) {
+    const target = calculateSnapTarget(cursor);
+    if (target) {
+      if (activeSnapTarget?.type !== target.type ||
+          JSON.stringify(activeSnapTarget.bounds) !== JSON.stringify(target.bounds)) showSnapGhost(target.bounds);
+      activeSnapTarget = target;
+    } else if (activeSnapTarget) {
+      activeSnapTarget = null;
+      hideSnapGhost();
+    }
+  }
+  // CSS app-region:drag uses the native Windows move loop, bypassing the
+  // renderer's pointer handlers. Keep resizing disabled, but snap this path too.
+  mainWindow.on('will-move', () => {
+    if (cursorMoveOrigin || isMiniMode || isWindowFullscreen || isWindowMaximized) return;
+    if (!nativeMoveStart) nativeMoveStart = mainWindow.getBounds();
+    updateSnapPreview(screen.getCursorScreenPoint());
+  });
+  function finishNativeMove() {
+    if (!nativeMoveStart || !mainWindow || mainWindow.isDestroyed()) return;
+    const start = nativeMoveStart;
+    nativeMoveStart = null;
+    const cursor = screen.getCursorScreenPoint();
+    const target = calculateSnapTarget(cursor);
+    activeSnapTarget = null;
+    hideSnapGhost();
+    if (target) {
+      const wasSnapped = !!currentSnapState;
+      applySnap(target.type, cursor);
+      if (!wasSnapped) preSnapBounds = start;
+    } else {
+      currentSnapState = null;
+      mainWindow.webContents.send('window-snapped', { snapType: null, bounds: mainWindow.getBounds() });
+      updateNormalBounds();
+    }
+  }
+  // WM_EXITSIZEMOVE fires on release, not on each position update.
+  if (process.platform === 'win32') mainWindow.hookWindowMessage(0x0232, finishNativeMove);
   function sampleSystemCursor() {
     if(!cursorMoveOrigin || !cursorMoveStart || !mainWindow || mainWindow.isDestroyed())return;
     const cursor=screen.getCursorScreenPoint();
@@ -617,16 +657,14 @@ function createWindow() {
     if(cursorMoveApplied?.x===x && cursorMoveApplied?.y===y)return;
     mainWindow.setPosition(x,y,false);
     cursorMoveApplied={x,y};
-    const target=calculateSnapTarget(cursor);
-    if(target) {if(activeSnapTarget?.type!==target.type)showSnapGhost(target.bounds);activeSnapTarget=target;}
-    else if(activeSnapTarget){activeSnapTarget=null;hideSnapGhost();}
+    updateSnapPreview(cursor);
   }
   function stopSystemCursorMove(finalSample=true) {
     if(cursorMoveTimer){clearInterval(cursorMoveTimer);cursorMoveTimer=null;}
     if(finalSample)sampleSystemCursor();
     cursorMoveOrigin=null;cursorMoveStart=null;cursorMoveApplied=null;
   }
-  mainWindow.on('blur',()=>{stopSystemCursorMove(false);activeSnapTarget=null;hideSnapGhost();});
+  mainWindow.on('blur',()=>{stopSystemCursorMove(false);nativeMoveStart=null;activeSnapTarget=null;hideSnapGhost();});
   mainWindow.on('closed',()=>stopSystemCursorMove(false));
   ipcMain.on('window-drag-start', (event, coords) => {
     stopSystemCursorMove(false);
@@ -1112,6 +1150,41 @@ function createWindow() {
   ipcMain.handle('skin-cache', async (_, snapshot) => {
     try { const io = require('./skinFiles'); return { data: await io.unpack(await io.pack(snapshot), app.getPath('userData'), nativeImage) }; }
     catch (e) { return { error: '保存皮肤失败：' + e.message }; }
+  });
+  const lyricsService = require('./lyrics').createService({
+    userData: app.getPath('userData'),
+    isKnownTrack: track => !!database.getTrack(track) || path.resolve(track).toLowerCase() === path.resolve(featuredTrackPath()).toLowerCase(),
+    readEmbedded: async track => {
+      const metadata = await require('music-metadata').parseFile(track, { skipCovers: true });
+      const lyrics = metadata.common?.lyrics;
+      return Array.isArray(lyrics) ? lyrics.find(value => typeof value === 'string') : typeof lyrics === 'string' ? lyrics : null;
+    }
+  });
+  ipcMain.handle('lyrics-folder', async () => {
+    try {
+      const result = await dialog.showOpenDialog(mainWindow, { title: '选择时间轴歌词库文件夹', properties: ['openDirectory'] });
+      if (result.canceled || !result.filePaths[0]) return { canceled: true };
+      return await lyricsService.setFolder(result.filePaths[0]);
+    } catch (e) { return { error: e.message }; }
+  });
+  ipcMain.handle('lyrics-load', async (_, track) => {
+    try { return await lyricsService.load(track); } catch (e) { return { error: e.message }; }
+  });
+  ipcMain.handle('lyrics-translation-import', async (_, track) => {
+    try {
+      if (typeof track !== 'string' || !database.getTrack(track) && path.resolve(track).toLowerCase() !== path.resolve(featuredTrackPath()).toLowerCase()) throw Error('请先选择歌曲');
+      const result = await dialog.showOpenDialog(mainWindow, { title: '为当前歌曲导入译文（TXT 每句一行，或带时间轴的 LRC／JSON）', defaultPath: path.dirname(track), properties: ['openFile'], filters: [{ name: '译文文件', extensions: ['lrc', 'elrc', 'yrc', 'json', 'txt'] }] });
+      if (result.canceled || !result.filePaths[0]) return { canceled: true };
+      return await lyricsService.importTranslation(track, result.filePaths[0]);
+    } catch (e) { return { error: e.message }; }
+  });
+  ipcMain.handle('lyrics-import', async (_, track) => {
+    try {
+      if (typeof track !== 'string' || !database.getTrack(track) && path.resolve(track).toLowerCase() !== path.resolve(featuredTrackPath()).toLowerCase()) throw Error('请先选择歌曲');
+      const result = await dialog.showOpenDialog(mainWindow, { title: '为当前歌曲导入歌词', defaultPath: path.dirname(track), properties: ['openFile'], filters: [{ name: '歌词文件', extensions: ['lrc', 'elrc', 'yrc', 'json', 'txt'] }] });
+      if (result.canceled || !result.filePaths[0]) return { canceled: true };
+      return await lyricsService.importFile(track, result.filePaths[0]);
+    } catch (e) { return { error: e.message }; }
   });
   ipcMain.handle('skin-export-file', async (_, snapshot) => {
     try {

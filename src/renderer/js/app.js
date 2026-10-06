@@ -23,6 +23,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // A skin can reload the renderer; restore its visual tuning and current
   // window layout before asynchronous library loading yields the first frame.
   window.GlassWaveSkin?.restore(ui);
+  const lyrics = new window.GlassWaveLyrics.LyricsController(audioEngine, ui);
+  window.lyricsController = lyrics;
 
   // Sync Audio Bass Energy to Ambient Color Engine
   const syncLoop = () => {
@@ -39,6 +41,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 2. Track Change Sync & Persistence
   audioEngine.onTrackChange = (track) => {
     ui.updateTrackView(track);
+    lyrics.setTrack(track);
     saveState();
   };
 
@@ -58,7 +61,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         repeatMode: audioEngine.repeatMode,
         eq: audioEngine.getEQState(),
         savedQueuePaths: (audioEngine.playbackQueue || []).map(t => t.path),
-        savedQueueIndex: audioEngine.queueIndex
+        savedQueueIndex: audioEngine.queueIndex,
+        playbackScope: audioEngine.playbackScope || { type: 'library' }
       };
       localStorage.setItem('glasswave_state', JSON.stringify(state));
     } catch (e) {
@@ -179,24 +183,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // A) If real library tracks exist
     if (libraryTracks && libraryTracks.length > 0) {
-      let queueRestored = false;
-      if (saved && Array.isArray(saved.savedQueuePaths) && saved.savedQueuePaths.length > 0) {
-        const pathMap = new Map(libraryTracks.map(t => [t.path, t]));
-        const restoredQueue = saved.savedQueuePaths.map(p => pathMap.get(p)).filter(Boolean);
-        if (restoredQueue.length > 0) {
-          audioEngine.playbackQueue = restoredQueue;
-          queueRestored = true;
-          if (typeof saved.savedQueueIndex === 'number' && saved.savedQueueIndex >= 0 && saved.savedQueueIndex < restoredQueue.length) {
-            audioEngine.queueIndex = saved.savedQueueIndex;
-          } else {
-            audioEngine.queueIndex = 0;
-          }
-        }
-      }
-
-      if (!queueRestored) {
-        audioEngine.playbackQueue = [...libraryTracks];
-      }
+      audioEngine.restoreStartupQueue(libraryTracks, saved, ui.categories || []);
 
       // Check settings for autoplay, launch shuffle, and remember progress
       let isAutoplay = true;
@@ -265,6 +252,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   document.body.style.opacity = '1';
+  try {
+    // Category loading in UI initialization is asynchronous; do not restore
+    // playback until the current category memberships are available.
+    await ui.loadCategories();
+  } catch (err) {
+    console.warn('Could not restore playback category:', err);
+  }
   try {
     autoPlayOnStartup();
   } catch (err) {

@@ -37,6 +37,45 @@ function makeImportUI() {
   return { ui, events, scans, overlay, event };
 }
 
+test('search result playback records its base category separately from the filtered queue', () => {
+  const { ui, handlers } = makeUI();
+  let scope;
+  ui.filteredTracks = [{ path: 'a.wav' }];
+  ui.searchQuery = 'a'; ui.currentSubView = 'all'; ui._prevSubViewBeforeSearch = 'category:warm';
+  ui.audioEngine = { setQueue(tracks, index, source) { scope = source; }, loadTrack() {} };
+  ui.bindTrackListEvents();
+  handlers.dblclick({ target: { closest: selector => selector === '.track-row' ? { dataset: { index: '0' } } : null } });
+  assert.equal(scope.type, 'category'); assert.equal(scope.categoryId, 'warm');
+  ui._prevSubViewBeforeSearch = null;
+  handlers.dblclick({ target: { closest: selector => selector === '.track-row' ? { dataset: { index: '0' } } : null } });
+  assert.equal(scope.type, 'library');
+});
+
+test('Zen bottom bar stays during lyric editing and resumes timed hiding afterward', () => {
+  const { ui, context } = makeUI(); const classes = new Set(['zen-mode', 'lyrics-settings-open']); const timers = [];
+  context.window.addEventListener = () => {}; context.document.getElementById = () => null;
+  context.document.querySelector = () => ({ matches: () => false });
+  context.document.body = { classList: { contains: k => classes.has(k), add: (...ks) => ks.forEach(k => classes.add(k)), remove: (...ks) => ks.forEach(k => classes.delete(k)), toggle: (k, yes) => yes ? classes.add(k) : classes.delete(k) } };
+  context.setTimeout = callback => { timers.push(callback); return timers.length; }; context.clearTimeout = () => {};
+  ui.bindZenMode(); ui.refreshZenPointerState();
+  assert.equal(classes.has('zen-show-player-bar'), true); assert.equal(classes.has('zen-interactive-open'), true);
+  classes.delete('lyrics-settings-open'); ui.refreshZenPointerState();
+  assert.equal(classes.has('zen-interactive-open'), false); timers.forEach(callback => callback());
+  assert.equal(classes.has('zen-show-player-bar'), false);
+});
+
+test('wheel inside lyric settings is excluded from global playback volume adjustment', () => {
+  const { ui, context } = makeUI();
+  let wheel, volume = 0, prevented = false;
+  context.window.addEventListener = (name, callback) => { if (name === 'wheel') wheel = callback; };
+  ui.currentView = 'player'; ui.adjustVolumeByWheel = () => volume++;
+  ui.bindGlobalVolumeWheel();
+  wheel({ target: { closest: selector => selector.includes('.lyrics-settings-panel') ? {} : null }, deltaY: 100, preventDefault: () => { prevented = true; } });
+  assert.equal(volume, 0); assert.equal(prevented, false);
+  wheel({ target: { closest: () => null }, deltaY: 100, preventDefault: () => { prevented = true; } });
+  assert.equal(volume, 1); assert.equal(prevented, true);
+});
+
 test('internal library and queue drags never show import UI or change drop effects', async () => {
   const { events, scans, overlay, event } = makeImportUI();
   for (const types of [['application/x-glasswave-tracks', 'text/plain', 'Files'], ['text/queue-index', 'Files']]) {
@@ -342,6 +381,19 @@ test('blank library background starts a window drag without leaving the library'
   assert.equal(classes.has('zen-dragging-window'), false);
   events.pointerup();
   assert.deepEqual(moves.at(-1), ['end']);
+});
+
+test('titlebar gaps allow background dragging while search and audio controls stay interactive', () => {
+  const { ui } = makeUI();
+  const target = ancestors => ({ closest: selectors => selectors.split(',').some(s => ancestors.includes(s.trim())) ? {} : null });
+  for (const ancestors of [
+    ['#app-shell', '#titlebar', '.titlebar-center'],
+    ['#app-shell', '#titlebar', '.titlebar-center', '.search-cluster'],
+    ['#app-shell', '#titlebar', '.titlebar-left']
+  ]) assert.equal(ui.canDragWindowFromTarget(target(ancestors)), true);
+  for (const control of ['.glass-search-box', 'input', 'button', '.search-more-popover', '.hifi-badge-wrap', '.glass-hifi-popover']) {
+    assert.equal(ui.canDragWindowFromTarget(target(['#app-shell', '#titlebar', control])), false);
+  }
 });
 
 test('Zen content pages keep their pinned sidebar when the background is pressed', () => {

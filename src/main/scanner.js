@@ -13,6 +13,13 @@ class LibraryScanner {
   isSupportedAudio(p){return AUDIO_EXTS.has(path.extname(p).toLowerCase());}
   isSupportedImage(p){return IMAGE_EXTS.has(path.extname(p).toLowerCase());}
   async reconcile(){for(const root of this.watchers.keys())await this.scanDirectory(root);}
+  async refreshAmbiguousTitles(){
+    let changed=false;
+    for(const track of this.db.getAllTracks()){
+      if(this.parser.needsTitleRefresh(track)) changed=(await this.parseAndStore(track.path))||changed;
+    }
+    if(changed)this.scheduleSaveAndUpdate();
+  }
   async parseAndStore(p,valid=()=>true){
     const version=(this.versions.get(p)||0)+1;this.versions.set(p,version);
     try {
@@ -44,7 +51,7 @@ class LibraryScanner {
         const p=path.join(dir,e.name);
         if(e.isDirectory())await walk(p);
         else if(e.isFile()&&this.isSupportedAudio(p)&&!this.db.isHidden(p)){
-          try{const stat=await fs.promises.stat(p),old=this.db.getTrack(p);if(!old||old.mtime!==stat.mtimeMs)changed=(await this.parseAndStore(p,valid))||changed;}catch{}
+          try{const stat=await fs.promises.stat(p),old=this.db.getTrack(p);if(!old||old.mtime!==stat.mtimeMs||this.parser.needsTitleRefresh?.(old))changed=(await this.parseAndStore(p,valid))||changed;}catch{}
         }
       }
     };

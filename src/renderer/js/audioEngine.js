@@ -16,6 +16,7 @@ class AudioEngine {
     this.isPlaying = false;
     this.currentTrack = null;
     this.playbackQueue = [];
+    this.playbackScope = { type: 'library' };
     this.queueIndex = -1;
 
     // Playback state & mode
@@ -453,7 +454,26 @@ class AudioEngine {
     if (this.onQueueChange) this.onQueueChange(this.playbackQueue, this.queueIndex);
   }
 
-  setQueue(tracks, startIndex = 0) {
+  restoreStartupQueue(libraryTracks, saved, categories = []) {
+    // Search/filter results are a session queue, never the next launch's scope.
+    // Resolve category membership afresh so additions/removals also take effect.
+    const scope = saved?.playbackScope;
+    const category = scope?.type === 'category' ? categories.find(c => c.id === scope.categoryId) : null;
+    const members = category ? new Set(category.trackPaths || []) : null;
+    let queue = members ? libraryTracks.filter(t => members.has(t.path)) : [];
+    if (!queue.length || (saved?.lastTrackPath && !queue.some(t => t.path === saved.lastTrackPath))) {
+      queue = [...libraryTracks];
+      this.playbackScope = { type: 'library' };
+    } else {
+      this.playbackScope = { type: 'category', categoryId: category.id };
+    }
+    this.playbackQueue = queue;
+    this.queueIndex = Math.max(0, queue.findIndex(t => t.path === saved?.lastTrackPath));
+  }
+
+  setQueue(tracks, startIndex = 0, scope = { type: 'library' }) {
+    this.playbackScope = scope?.type === 'category'
+      ? { type: 'category', categoryId: scope.categoryId } : { type: 'library' };
     this.playbackQueue = Array.isArray(tracks) ? [...tracks] : [];
     this.queueIndex = Math.max(0, Math.min(this.playbackQueue.length - 1, startIndex));
     if (this.isShuffle && this.playbackQueue[this.queueIndex] && !this._isInternalNav) {

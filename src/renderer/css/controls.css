@@ -215,6 +215,11 @@ body #app-shell > .glass-titlebar { flex:0 0 48px; }
 body .glass-eq-modal,body .glass-context-menu { animation:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important; }
 
 body.window-fullscreen .window-resize-handle,body.is-maximized .window-resize-handle { display:none!important; }
+/* Full-screen surfaces reach every screen corner, including transparent skins. */
+body.window-fullscreen #app-shell,body.is-maximized #app-shell {
+ border-radius:0!important;clip-path:none!important;border:none!important;box-shadow:none!important;
+ transition:none!important;
+}
 
 /* Mode changes commit layout once. Inner controls never tween their width/margins. */
 body.zen-switching *,body.zen-switching *::before,body.zen-switching *::after { transition:none!important; }
