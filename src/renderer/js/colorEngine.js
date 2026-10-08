@@ -162,22 +162,27 @@ class ColorEngine {
     this.initCanvas();
     this.startRenderLoop();
 
-    // Restore saved settings
+    this.restoreSettings();
+  }
+
+  restoreSettings() {
+    const savedTheme = localStorage.getItem('glasswave_skin_theme') || 'aurora';
+    const savedPureHex = localStorage.getItem('glasswave_pure_color');
+    this.clearPureColor();
+    // Restore saved settings without replacing the engine or its render loop.
     try {
-      const savedTheme = localStorage.getItem('glasswave_skin_theme') || 'aurora';
       this.setTheme(savedTheme);
 
       const savedGlowEnabled = localStorage.getItem('glasswave_glow_enabled');
-      if (savedGlowEnabled !== null) this.glowEnabled = savedGlowEnabled !== 'false';
+      this.glowEnabled = savedGlowEnabled !== 'false';
       this.glowMode = localStorage.getItem('glasswave_glow_mode') || 'multi';
       this.blobCount = parseInt(localStorage.getItem('glasswave_glow_blob_count') || '4', 10);
       this.speedMultiplier = parseFloat(localStorage.getItem('glasswave_glow_speed') || '1.0');
       this.intensityMultiplier = parseFloat(localStorage.getItem('glasswave_glow_intensity') || '1.0');
 
-      const savedPureHex = localStorage.getItem('glasswave_pure_color');
       if (savedPureHex) {
         const found = ColorEngine.PURE_COLORS.find(c => c.hex.toLowerCase() === savedPureHex.toLowerCase());
-        if (found) this.setPureColor(found.hex, found.name, false);
+        this.setPureColor(savedPureHex, found?.name || '自定义', true);
       }
     } catch (e) {}
   }

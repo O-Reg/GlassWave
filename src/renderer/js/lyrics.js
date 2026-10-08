@@ -210,7 +210,10 @@
       const rect = this.stage.parentElement.getBoundingClientRect(); if (!rect.height) return;
       const bar = document.querySelector('.glass-player-bar');
       const barRect = bar?.getBoundingClientRect(), barStyle = bar && getComputedStyle(bar);
-      const bottom = barRect && barStyle.display !== 'none' && Number(barStyle.opacity) > 0.01 && barRect.top < rect.bottom ? Math.min(rect.bottom, barRect.top) - 12 : rect.bottom - 12;
+      const zen = document.body.classList.contains('zen-mode');
+      const dockVisible = zen && bar && (document.body.classList.contains('zen-show-player-bar') || document.body.classList.contains('zen-interactive-open') || document.body.classList.contains('zen-content-view') || bar.matches(':hover'));
+      // Size the frame against the stable stage, never the dock's animated bounds.
+      const bottom = zen ? rect.bottom - 12 : (barRect && barStyle.display !== 'none' && Number(barStyle.opacity) > 0.01 && barRect.top < rect.bottom ? Math.min(rect.bottom, barRect.top) - 12 : rect.bottom - 12);
       this.stage.style.setProperty('--lyric-bottom-clearance', `${Math.max(12, rect.bottom - bottom)}px`);
       const meta = document.getElementById('parallax-deck').getBoundingClientRect();
       // Fit real wrapped content, then keep the entire stage above the playback controls.
@@ -243,6 +246,11 @@
       const y = Math.max(minY, Math.min(maxY, desired));
       const halfWidth = this.stage.getBoundingClientRect().width / 2;
       const x = Math.max(halfWidth + 12, Math.min(rect.width - halfWidth - 12, rect.width * (this.settings.position === 'custom' ? this.settings.x / 100 : .5)));
+      const frameBottom = this.settings.position === 'bottom' ? bottom : rect.top + y + half;
+      const dockTop = rect.bottom - (bar?.offsetHeight || barRect?.height || 0);
+      const neededLift = dockVisible ? Math.max(0, frameBottom - (dockTop - 12)) : 0;
+      const lift = Math.min(neededLift, Math.max(0, frameBottom - height - top));
+      this.stage.style.setProperty('--lyric-dock-shift', lift.toFixed(2) + 'px');
       this.stage.style.left = `${x}px`;
       this.stage.style.top = this.settings.position === 'bottom' ? 'auto' : `${Math.round(y)}px`;
       const value = `${Math.round(y)}px`;

@@ -396,6 +396,18 @@ test('titlebar gaps allow background dragging while search and audio controls st
   }
 });
 
+test('mini strip text, artwork and layout gaps drag, while transport and sliders stay interactive', () => {
+  const {ui,context}=makeUI();
+  context.document.body={classList:{contains:name=>name==='mini-bar-mode'||name==='zen-mode'}};
+  const target=ancestors=>({closest:selectors=>selectors.split(',').some(s=>ancestors.includes(s.trim()))?{}:null});
+  for(const area of ['.bar-left','.bar-center','.bar-right','.mini-title','.mini-artist','#mini-cover','img','.timeline-wrap','.time-label','.playback-controls']) {
+    assert.equal(ui.canDragWindowFromTarget(target(['#app-shell','.glass-player-bar',area])),true,area);
+  }
+  for(const control of ['button','input','.timeline-track','.volume-slider-wrap']) {
+    assert.equal(ui.canDragWindowFromTarget(target(['#app-shell','.glass-player-bar',control,'svg'])),false,control);
+  }
+});
+
 test('Zen content pages keep their pinned sidebar when the background is pressed', () => {
   const { ui, context } = makeUI();
   const classes = new Set(['zen-mode', 'zen-show-sidebar']);

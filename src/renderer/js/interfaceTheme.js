@@ -60,5 +60,11 @@
     document.getElementById('transparency-controls')?.after(section);if(!section.parentNode)panel.prepend(section);
     document.getElementById('current-cover')?.addEventListener('load',followCover);apply();refresh();followCover();
   }
-  window.GlassWaveTheme={init,apply,usePreset,setBackground:hex=>{if(state.enabled&&valid(hex)){state.background=hex;state.preset="custom";apply();refresh();}},getState:()=>JSON.parse(JSON.stringify(state))};
+  function restore(){
+    try{state={...base,...JSON.parse(localStorage.getItem(KEY)||'{}')};}catch{state={...base};}
+    for(const k of ['background','panel','accent','selection','sidebar','topbar','playerbar'])if(!valid(state[k]))state[k]=base[k];
+    if(!Array.isArray(state.profiles))state.profiles=[];
+    apply();if(section)refresh();followCover();
+  }
+  window.GlassWaveTheme={init,apply,restore,usePreset,setBackground:hex=>{if(state.enabled&&valid(hex)){state.background=hex;state.preset="custom";apply();refresh();}},getState:()=>JSON.parse(JSON.stringify(state))};
 })();

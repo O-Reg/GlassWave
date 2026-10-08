@@ -76,6 +76,45 @@
 }
 .eq-val-badge { white-space: nowrap; }
 
+/* The strip uses the existing pointer drag path over every non-control surface. */
+body.mini-bar-mode #app-shell,
+body.mini-bar-mode .glass-player-bar,
+body.mini-bar-mode .glass-player-bar * {
+  -webkit-app-region: no-drag !important;
+}
+body.mini-bar-mode #app-shell .glass-player-bar {
+  left: 0 !important;
+  right: 0 !important;
+  transform: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  overflow: hidden !important;
+}
+body.mini-bar-mode #mini-cover,
+body.mini-bar-mode #mini-cover img {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+body.mini-bar-mode #custom-bg-layer {
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+  contain: paint;
+}
+body.mini-bar-mode #custom-bg-image {
+  transform: translate3d(calc(var(--custom-bg-trans-x, 0px) + var(--mini-parallax-x, 0px)), calc(var(--custom-bg-trans-y, 0px) + var(--mini-parallax-y, 0px)), 0) scale(var(--custom-bg-scale, 1.04)) rotate(var(--custom-bg-rotate, 0deg)) !important;
+  transition: none !important;
+}
+
+/* Keep the preset icons visible together at the minimum window height. */
+@media (max-height: 760px) {
+  .glass-eq-modal { padding: 12px 16px; gap: 6px; }
+  .eq-sliders-row { height: 140px; }
+  .eq-slider-track { min-height: 80px; }
+  .eq-slider-vertical { width: 80px; }
+}
+
 .vis-color-controls {
   padding: 12px;
   margin-bottom: 14px;

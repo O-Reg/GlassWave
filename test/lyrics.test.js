@@ -255,3 +255,20 @@ test('imported translations persist per audio path without overwriting original 
     await fsp.rm(resolved, { recursive: true, force: true });
   }
 });
+
+test('Zen dock reveal only lifts lyrics and preserves frame dimensions and font size',()=>{
+  const {window,context}=renderer(),classes=new Set(['zen-mode']),props={},style={setProperty:(k,v)=>props[k]=v,getPropertyValue:k=>props[k]||''};
+  const parent={classList:{remove(){}},getBoundingClientRect:()=>({top:0,bottom:700,height:700,width:1000})};
+  const stage={hidden:false,parentElement:parent,style,clientHeight:200,clientWidth:640,scrollWidth:640,getBoundingClientRect:()=>({height:parseFloat(style.height)||200,width:parseFloat(style.width)||640})};
+  const bar={offsetHeight:90,matches:()=>false,getBoundingClientRect:()=>({top:610,height:90})};
+  context.document={body:{classList:{contains:k=>classes.has(k)}},querySelector:()=>bar,getElementById:()=>({getBoundingClientRect:()=>({bottom:450})})};
+  context.getComputedStyle=e=>e===bar?{display:'flex',opacity:'1'}:{paddingTop:'12',paddingBottom:'12'};
+  const c=Object.create(window.GlassWaveLyrics.LyricsController.prototype);c.stage=stage;c.content={scrollHeight:100};c.document={timed:true};
+  for(const position of ['custom','below','bottom']){
+    c.settings={width:64,height:32,size:36,position,x:50,y:85};c.updatePlacement();
+    const before={width:style.width,height:style.height,size:props['--lyric-effective-size'],top:style.top};
+    assert.equal(parseFloat(props['--lyric-dock-shift']),0);classes.add('zen-show-player-bar');c.updatePlacement();
+    assert.deepEqual({width:style.width,height:style.height,size:props['--lyric-effective-size'],top:style.top},before);assert.ok(parseFloat(props['--lyric-dock-shift'])>0);
+    classes.delete('zen-show-player-bar');c.updatePlacement();assert.equal(parseFloat(props['--lyric-dock-shift']),0);
+  }
+});

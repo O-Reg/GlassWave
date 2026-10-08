@@ -3194,30 +3194,115 @@ body.zen-mode.zen-interactive-open #view-settings {
 /* ==========================================================================
    Batch Action Bar
    ========================================================================== */
+.batch-action-slot {
+  position: absolute;
+  left: 32px;
+  right: 56px;
+  bottom: 24px;
+  height: 52px;
+  z-index: 86;
+  min-width: 0;
+  pointer-events: none;
+}
+
+body.zen-mode .batch-action-slot {
+  bottom: 96px;
+  left: 24px;
+}
+
+/* Scroll clearance for the last row, without reserving viewport space. */
+#view-library .track-list-scroll-view::after {
+  content: '';
+  display: block;
+  height: 76px;
+  pointer-events: none;
+}
+
 .batch-action-bar {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
-  background: rgba(20, 26, 44, 0.9);
+  gap: clamp(4px, 1vw, 8px);
+  max-width: 520px;
+  margin-inline: auto;
+  padding: 6px 8px;
+  background: rgba(var(--ui-panel-rgb, 20, 26, 44), 0.94);
   border: 1px solid rgba(138, 196, 255, 0.4);
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   flex-shrink: 0;
-  animation: fadeIn 0.2s ease;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(12px);
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s 220ms;
+}
+
+.batch-action-bar.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .batch-action-bar { transition: none; transform: none; }
 }
 
 .batch-selected-info {
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-size: 13px;
   font-weight: 500;
   color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
+
+.batch-selected-info svg { width: 16px; height: 16px; }
 
 .batch-actions-group {
   display: flex;
+  flex: 1 1 0;
+  min-width: 0;
   align-items: center;
-  gap: 8px;
+  gap: clamp(2px, .6vw, 6px);
+  overflow: visible;
 }
+
+.batch-action-bar .glass-pill-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 34px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.batch-action-bar .glass-pill-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+.batch-action-bar #btn-batch-clear-selection { flex: 0 0 34px; }
+.batch-action-bar .glass-pill-btn:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+
+.reverb-presets-panel { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.reverb-heading { display: flex; justify-content: space-between; gap: 8px; color: var(--text-muted); font-size: 11px; }
+#reverb-preset-name { color: var(--accent-primary); white-space: nowrap; }
+.reverb-icon-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.reverb-icon-btn {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 0; height: 34px; padding: 0;
+  border: 1px solid var(--glass-border-light); border-radius: 999px;
+  background: rgba(255,255,255,.05); color: var(--text-main); cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.reverb-icon-btn svg { width: 19px; height: 19px; }
+.reverb-icon-btn:hover, .reverb-icon-btn.active { background: var(--glass-bg-active); border-color: var(--accent-primary); color: var(--accent-primary); }
+.reverb-icon-btn:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 
 /* ==========================================================================
    Glass Modals

@@ -12,6 +12,9 @@ class AudioEngine {
     this.analyser = null;
     this.source = null;
     this.gainNode = null;
+    this.reverb = null;
+    this.reverbPreset = 'off';
+    try { this.reverbPreset = window.GlassWaveReverb?.preset(localStorage.getItem('glasswave_reverb_preset')).id || 'off'; } catch {}
 
     this.isPlaying = false;
     this.currentTrack = null;
@@ -97,7 +100,10 @@ class AudioEngine {
           prevNode.connect(filter);
           prevNode = filter;
         }
-        prevNode.connect(this.analyser);
+        if (window.GlassWaveReverb) {
+          this.reverb = new window.GlassWaveReverb.Processor(this.audioContext, prevNode, this.analyser);
+          this.reverb.select(this.reverbPreset);
+        } else prevNode.connect(this.analyser);
         this.analyser.connect(this.gainNode);
         this.gainNode.connect(this.audioContext.destination);
       }
@@ -469,6 +475,13 @@ class AudioEngine {
     }
     this.playbackQueue = queue;
     this.queueIndex = Math.max(0, queue.findIndex(t => t.path === saved?.lastTrackPath));
+  }
+
+  setReverbPreset(id) {
+    this.reverbPreset = window.GlassWaveReverb?.preset(id).id || 'off';
+    this.reverb?.select(this.reverbPreset);
+    try { localStorage.setItem('glasswave_reverb_preset', this.reverbPreset); } catch {}
+    return this.reverbPreset;
   }
 
   setQueue(tracks, startIndex = 0, scope = { type: 'library' }) {

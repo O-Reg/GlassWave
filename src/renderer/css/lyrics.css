@@ -52,4 +52,19 @@ body.ui-custom-colors .lyrics-settings-panel { color:var(--ui-panel-ink); backgr
 body.zen-mode.lyrics-settings-open .glass-player-bar { transform:translateY(0) scale(1)!important; opacity:1!important; pointer-events:auto!important; }
 body.mini-bar-mode #btn-toggle-lyrics { display:none!important; }
 body.mini-bar-mode .lyrics-settings-panel { display:none!important; }
+body.mini-bar-mode .lyrics-stage { display:none!important; pointer-events:none!important; }
 @media (prefers-reduced-motion:reduce) { .lyrics-stage { animation:none!important; } }
+
+/* Dock reveal translates the frame; typography and dimensions stay fixed. */
+body.zen-mode .lyrics-stage {
+  transform: translate(-50%, calc(-50% - var(--lyric-dock-shift, 0px)));
+  transition: transform 220ms cubic-bezier(.2, 0, 0, 1);
+  will-change: transform;
+}
+body.zen-mode .lyrics-stage[data-position="bottom"] {
+  transform: translate(-50%, calc(0px - var(--lyric-dock-shift, 0px)));
+}
+body.zen-mode .lyrics-stage.is-positioning { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  body.zen-mode .lyrics-stage { transition: none; }
+}

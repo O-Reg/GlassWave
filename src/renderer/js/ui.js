@@ -122,6 +122,7 @@ class UIController {
     }
 
     // Initialize UI Binders
+    this.bindModalDismissGuard();
     this.bindWindowControls();
     this.bindTitlebarDoubleClick();
     this.bindNavigation();
@@ -1744,6 +1745,7 @@ class UIController {
     if (btnAddQuick) btnAddQuick.onclick = () => openCategoryModal(null, '', 'group');
     if (btnCloseCat) btnCloseCat.onclick = closeCategoryModal;
     if (btnCancelCat) btnCancelCat.onclick = closeCategoryModal;
+    if (modalCat) modalCat.onclick = e => { if (e.target === modalCat) closeCategoryModal(); };
 
     if (btnSaveCat && inputCatName) {
       btnSaveCat.onclick = async () => {
@@ -3002,9 +3004,16 @@ class UIController {
   clearSelection() {
     this.selectedTrackPaths.clear();
     this.lastSelectedTrackIndex = -1;
-    const bar = document.getElementById('batch-action-bar');
-    if (bar) bar.style.display = 'none';
+    this.setSelectionBarVisible(false);
     document.querySelectorAll('.track-row.selected').forEach(r => r.classList.remove('selected'));
+  }
+
+  setSelectionBarVisible(visible) {
+    const bar = document.getElementById('batch-action-bar');
+    if (!bar) return;
+    bar.classList.toggle('is-visible', visible);
+    bar.setAttribute('aria-hidden', String(!visible));
+    bar.inert = !visible;
   }
 
   updateSelectionUI() {
@@ -3014,7 +3023,7 @@ class UIController {
 
     if (bar && countEl) {
       if (size > 0) {
-        bar.style.display = 'flex';
+        this.setSelectionBarVisible(true);
         countEl.textContent = size;
 
         // Toggle "从当前分类移除" button based on subview
@@ -3023,7 +3032,7 @@ class UIController {
           btnBatchRemoveCat.style.display = this.currentSubView.startsWith('category:') ? 'inline-block' : 'none';
         }
       } else {
-        bar.style.display = 'none';
+        this.setSelectionBarVisible(false);
       }
     }
 
@@ -4823,7 +4832,7 @@ class UIController {
         </div>
         <div class="preset-card-actions">
           <button class="glass-pill-btn btn-apply-preset" title="一键应用此预设">一键应用</button>
-          <details class="skin-card-more"><summary aria-label="皮肤操作" title="更多操作">⋯</summary><button class="btn-delete-preset" title="删除此预设">删除预设</button></details>
+          <details class="skin-card-more"><summary aria-label="皮肤操作" title="更多操作">⋯</summary><button class="btn-rename-preset">重命名</button><button class="btn-delete-preset" title="删除此预设">删除预设</button></details>
         </div>
       `;
 
@@ -4845,6 +4854,7 @@ class UIController {
         card.querySelector('.preset-meta-tags').appendChild(badge);
       }
       card.querySelector('.btn-apply-preset').onclick = () => this.applyCustomPreset(p);
+      card.querySelector('.btn-rename-preset').onclick = () => this.openSkinRename(p);
       card.querySelector('.btn-delete-preset').onclick = async (e) => {
         e.stopPropagation();
         const ok = await this.showGlassConfirm({
@@ -4863,6 +4873,28 @@ class UIController {
     });
   }
 
+  bindModalDismissGuard() {
+    let press=null;
+    const selector='.glass-modal-backdrop, .glass-confirm-backdrop, #glass-confirm-dialog';
+    document.addEventListener('pointerdown',e=>{press={target:e.target,x:e.clientX,y:e.clientY};},true);
+    document.addEventListener('pointercancel',()=>{press=null;},true);
+    document.addEventListener('click',e=>{
+      if(!e.target.matches?.(selector)||e.detail===0)return;
+      const outsideClick=press?.target===e.target && Math.hypot(e.clientX-press.x,e.clientY-press.y)<6;
+      press=null;
+      if(!outsideClick){e.preventDefault();e.stopImmediatePropagation();}
+    },true);
+  }
+
+  openSkinRename(preset) {
+    const save=document.getElementById('btn-save-custom-preset');if(!save||!preset)return;
+    save.click();this.editingSkinPresetId=preset.id;
+    const modal=document.getElementById('modal-save-preset'),input=document.getElementById('input-preset-name');
+    const title=modal?.querySelector('h3');if(title)title.textContent='重命名皮肤';
+    const help=modal?.querySelector('.glass-confirm-msg');if(help)help.textContent='仅修改皮肤名称，已保存的图片、配色与参数保持不变。';
+    if(input){input.value=preset.name;input.focus();input.select();}
+  }
+
   bindCustomPresetActions() {
     const btnSave = document.getElementById('btn-save-custom-preset');
     const modal = document.getElementById('modal-save-preset');
@@ -4873,6 +4905,7 @@ class UIController {
     if (!btnSave || !modal) return;
 
     const closeModal = () => {
+      this.editingSkinPresetId = null;
       modal.dataset.open = 'false';
       modal.classList.remove('active');
       setTimeout(() => { if (modal.dataset.open !== 'true') modal.style.display = 'none'; }, 200);
@@ -4894,10 +4927,20 @@ class UIController {
       const name = input ? input.value.trim() : '';
       if (!name) return;
       btnConfirm.disabled = true;
-      try { await this.saveCurrentAsPreset(name); closeModal(); } catch (e) { alert(e.message); } finally { btnConfirm.disabled = false; }
+      try {
+        if(this.editingSkinPresetId){
+          const presets=this.getSavedPresets(),preset=presets.find(p=>p.id===this.editingSkinPresetId);
+          if(!preset)throw Error('此皮肤已被删除');
+          preset.name=name;localStorage.setItem('glasswave_user_presets',JSON.stringify(presets));this.renderCustomPresets();
+        }else await this.saveCurrentAsPreset(name);
+        closeModal();
+      } catch (e) { alert(e.message); } finally { btnConfirm.disabled = false; }
     };
 
     btnSave.onclick = () => {
+      this.editingSkinPresetId = null;
+      const title=modal.querySelector('h3');if(title)title.textContent='保存自定义皮肤';
+      const help=modal.querySelector('.glass-confirm-msg');if(help)help.textContent='保存当前背景图片、透明度、界面配色和动态效果。输入名称，方便以后通过缩略图查找。';
       const presets = this.getSavedPresets();
       if (input) {
         input.value = `我的预设 ${presets.length + 1}`;
@@ -5367,7 +5410,35 @@ class UIController {
   // =========================================================================
   // 14. Hardware Equalizer, Zen Mode & Shortcuts
   // =========================================================================
+  bindReverbPresets() {
+    const grid = document.getElementById('reverb-presets');
+    const api = window.GlassWaveReverb;
+    if (!grid || !api) return;
+    grid.replaceChildren();
+    const refresh = () => {
+      const selected = api.preset(this.audioEngine.reverbPreset);
+      const name = document.getElementById('reverb-preset-name');
+      if (name) name.textContent = selected.name;
+      grid.querySelectorAll('button').forEach(button => {
+        const active = button.dataset.reverb === selected.id;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+    };
+    for (const preset of api.PRESETS) {
+      const button = document.createElement('button');
+      button.type = 'button';button.className = 'reverb-icon-btn';
+      button.dataset.reverb = preset.id;button.title = preset.name;
+      button.setAttribute('aria-label', preset.name);
+      button.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${preset.icon}"/></svg>`;
+      button.onclick = () => { this.audioEngine.setReverbPreset(preset.id);refresh(); };
+      grid.appendChild(button);
+    }
+    refresh();
+  }
+
   bindEqualizer() {
+    this.bindReverbPresets();
     const btnToggleEQ = document.getElementById('btn-toggle-eq');
     const eqModal = document.getElementById('glass-eq-modal');
     const btnCloseEQ = document.getElementById('btn-close-eq');
@@ -5404,7 +5475,7 @@ class UIController {
     document.addEventListener('pointerdown', (e) => {
       if (!eqModal || (!eqModal.classList.contains('open') && eqModal.style.display !== 'flex')) return;
       if (eqModal.contains(e.target) || (btnToggleEQ && btnToggleEQ.contains(e.target))) return;
-      if (e.target.closest('#glass-context-menu, #category-context-menu, .category-icon-picker, #glass-confirm-modal, #glass-confirm-dialog')) return;
+      if (e.target.closest('#glass-context-menu, #category-context-menu, .category-icon-picker, #glass-confirm-modal, #glass-confirm-dialog, #modal-rename-eq-preset')) return;
       eqModal.classList.remove('open');
       eqModal.style.display = 'none';
       if (btnToggleEQ) btnToggleEQ.classList.remove('active');
@@ -5545,6 +5616,8 @@ class UIController {
     if (btnConfirmRename) btnConfirmRename.onclick = () => confirmRename();
     if (btnCancelRename) btnCancelRename.onclick = () => closeRenameModal();
     if (btnCloseRenameModal) btnCloseRenameModal.onclick = () => closeRenameModal();
+    const renameModal=document.getElementById('modal-rename-eq-preset');
+    if(renameModal)renameModal.onclick=e=>{if(e.target===renameModal)closeRenameModal();};
     if (inputRename) {
       inputRename.onkeydown = (e) => {
         if (e.key === 'Enter') confirmRename();
@@ -5790,6 +5863,10 @@ class UIController {
 
   canDragWindowFromTarget(target) {
     if (!target || typeof target.closest !== 'function' || !target.closest('#app-shell')) return false;
+    if (document.body?.classList.contains('mini-bar-mode')) {
+      // Text, artwork and transport layout gaps are window background in the strip.
+      return !target.closest('button, input, select, textarea, a, [role="button"], [contenteditable="true"], .timeline-track, .volume-slider-wrap, .window-resize-handle');
+    }
     return !target.closest([
       'button', 'input', 'select', 'textarea', 'label', 'a', '[role="button"]', '[contenteditable="true"]',
       '.glass-search-box', '.search-more-popover', '.glass-hifi-popover',
@@ -5799,6 +5876,7 @@ class UIController {
       '#category-context-menu', '#glass-context-menu', '.glass-confirm-dialog', '.glass-modal',
       '.track-row', '.track-table', '.folder-card', '.folder-item', '.track-meta',
       '.alphabet-index-bar', '.custom-overlay-scrollbar-track', '.sort-dropdown-menu', '.sort-menu-item',
+      '.batch-action-bar',
       '.tag-pill', '.tag-chip', '.pop-tag-chip', '.category-item', '.category-group-heading',
       '.lyrics-scroll-container', '.volume-slider-wrap', '.window-resize-handle', '.hifi-badge-wrap'
     ].join(', '));

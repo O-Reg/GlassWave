@@ -528,28 +528,28 @@
           <button class="glass-pill-btn btn-clear-tags" id="btn-clear-tag-filters" style="display:none;">清空筛选</button>
         </div>
 
-        <!-- Batch Selection Action Bar (Shown when multi-selected) -->
-        <div class="batch-action-bar" id="batch-action-bar" style="display:none;">
-          <div class="batch-selected-info">
-            已选择 <span id="batch-selected-count">0</span> 首歌曲
-          </div>
-          <div class="batch-actions-group">
-            <button class="glass-pill-btn" id="btn-batch-add-category">添加到分类</button>
-            <button class="glass-pill-btn" id="btn-batch-add-tags">添加标签</button>
-            <button class="glass-pill-btn" id="btn-batch-add-queue">加入播放队列</button>
-            <button class="glass-pill-btn" id="btn-batch-favorite">收藏</button>
-            <button class="glass-pill-btn" id="btn-batch-remove-cat" style="display:none;">从当前分类移除</button>
-            <button class="glass-pill-btn" id="btn-batch-remove-lib">从音乐库移除</button>
-            <button class="glass-pill-btn btn-danger-pill" id="btn-batch-delete-file">删除本地文件</button>
-            <button class="glass-pill-btn" id="btn-batch-clear-selection">取消选择</button>
-          </div>
-        </div>
-
         <!-- Virtual Scrollable Track List -->
         <div class="track-list-scroll-view" id="track-list-scroll-view">
           <div class="virtual-scroll-spacer" id="virtual-scroll-spacer"></div>
           <div class="virtual-track-list" id="track-list-container">
             <div class="empty-hint">音乐库暂无歌曲，将音乐放入库文件夹或点击上方添加目录即可自动发现。</div>
+          </div>
+        </div>
+
+        <div class="batch-action-slot">
+          <!-- Floating toolbar never changes the song list layout. -->
+          <div class="batch-action-bar" id="batch-action-bar" role="toolbar" aria-label="歌曲选择操作" aria-hidden="true" inert>
+            <div class="batch-selected-info" title="已选择歌曲数量" aria-label="已选择歌曲数量"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M9 4h11v11M4 9h11v11H4z"/></svg><span id="batch-selected-count" aria-live="polite">0</span></div>
+            <div class="batch-actions-group">
+              <button class="glass-pill-btn" id="btn-batch-add-category" type="button" title="添加到分类" aria-label="添加到分类"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h7l2 2h9v11H3zM3 7V4h7l2 3M16 12v5M13.5 14.5h5"/></svg></button>
+              <button class="glass-pill-btn" id="btn-batch-add-tags" type="button" title="添加标签" aria-label="添加标签"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h8l10 10-8 8L3 11V3zM7 7h.01"/></svg></button>
+              <button class="glass-pill-btn" id="btn-batch-add-queue" type="button" title="加入播放队列" aria-label="加入播放队列"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h12M3 10h12M3 15h7M17 12v8M13 16h8"/></svg></button>
+              <button class="glass-pill-btn" id="btn-batch-favorite" type="button" title="收藏" aria-label="收藏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/></svg></button>
+              <button class="glass-pill-btn" id="btn-batch-remove-cat" style="display:none;" type="button" title="从当前分类移除" aria-label="从当前分类移除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h7l2 2h9v11H3zM3 7V4h7l2 3M13 15h6"/></svg></button>
+              <button class="glass-pill-btn" id="btn-batch-remove-lib" type="button" title="从音乐库移除（保留文件）" aria-label="从音乐库移除（保留文件）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h8M18 18l4 4M22 18l-4 4"/></svg></button>
+              <button class="glass-pill-btn btn-danger-pill" id="btn-batch-delete-file" type="button" title="删除本地文件" aria-label="删除本地文件"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
+            </div>
+            <button class="glass-pill-btn" id="btn-batch-clear-selection" type="button" title="取消选择" aria-label="取消选择"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
           </div>
         </div>
 
@@ -1736,6 +1736,11 @@
       <!-- 60Hz, 150Hz, 400Hz, 1kHz, 2.4kHz, 6kHz, 15kHz generated dynamically -->
     </div>
 
+    <div class="reverb-presets-panel">
+      <div class="reverb-heading"><span>空间混响</span><span id="reverb-preset-name">关闭混响</span></div>
+      <div class="reverb-icon-grid" id="reverb-presets" role="group" aria-label="空间混响预设"></div>
+    </div>
+
     <div class="eq-footer-hint">
       双击滑块可快速复位至 0 dB · 实时 32 位 Web Audio DSP 滤波
     </div>
@@ -2120,6 +2125,7 @@
 
   <!-- Modular Scripts -->
   <script src="js/colorEngine.js"></script>
+  <script src="js/reverb.js"></script>
   <script src="js/audioEngine.js"></script>
   <script src="js/visualizer.js"></script>
   <script src="js/parallax.js"></script>
