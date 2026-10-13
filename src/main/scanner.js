@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const chokidar = require('chokidar');
-const AUDIO_EXTS = new Set(['.mp3','.flac','.wav','.aac','.m4a','.ogg','.opus','.aiff','.wma']);
+const AUDIO_EXTS = new Set(['.mp3','.flac','.wav','.aac','.m4a','.ogg','.opus','.aiff','.wma','.ncm']);
 const IMAGE_EXTS = new Set(['.jpg','.jpeg','.png','.webp','.bmp']);
 const inside=(p,root)=>{const r=path.relative(root,p);return r==='' || (r!=='..'&&!r.startsWith('..'+path.sep)&&!path.isAbsolute(r));};
 class LibraryScanner {

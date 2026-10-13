@@ -1018,6 +1018,11 @@ function createWindow() {
   ipcMain.handle('library-remove-custom-tag', (event, tag) => database ? database.removeCustomTag(tag) : []);
 
   // Audio Inspector for HiFi Master specs
+  ipcMain.handle('audio-resolve-path', async (event, filePath) => {
+    if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) throw Error('音频路径无效');
+    return require('./ncm').isNcm(filePath) ? (await parser.ncm.prepare(filePath)).audioPath : filePath;
+  });
+
   ipcMain.handle('audio-inspect-spec', async (event, filePath) => {
     if (!filePath) return null;
     try {
@@ -1058,7 +1063,7 @@ function createWindow() {
   ipcMain.handle('library-get-history', () => database ? database.getHistory() : []);
 
   // Drag-and-drop Import with Duplicate Detection
-  const SUPPORTED_EXTS = new Set(['.mp3', '.flac', '.wav', '.m4a', '.ogg', '.aac', '.opus', '.wma']);
+  const SUPPORTED_EXTS = new Set(['.mp3', '.flac', '.wav', '.m4a', '.ogg', '.aac', '.opus', '.wma', '.ncm']);
   function resolveAudioFiles(filePaths) {
     const list = [];
     function walk(p) {
@@ -1119,6 +1124,7 @@ function createWindow() {
     const newTracks = [];
     let duplicateCount = 0;
     let newCount = 0;
+    const errors = [];
 
     for (const filePath of audioFiles) {
       const isExisting = existingMap.has(filePath);
@@ -1126,15 +1132,19 @@ function createWindow() {
         duplicateCount++;
         results.push(existingMap.get(filePath));
       } else {
-        newCount++;
         if (parser) {
-          const meta = await parser.parseFile(filePath);
-          results.push(meta);
-          newTracks.push(meta);
+          try {
+            const meta = await parser.parseFile(filePath);
+            results.push(meta);
+            newTracks.push(meta);
+            newCount++;
+          } catch (e) {
+            errors.push({ path: filePath, message: e.message });
+          }
         }
       }
     }
-    return { tracks: results, newTracks, duplicateCount, newCount };
+    return { tracks: results, newTracks, duplicateCount, newCount, errors };
   });
 
   ipcMain.handle('library-import-tracks', (event, newTracks) => {
@@ -1155,7 +1165,8 @@ function createWindow() {
     userData: app.getPath('userData'),
     isKnownTrack: track => !!database.getTrack(track) || path.resolve(track).toLowerCase() === path.resolve(featuredTrackPath()).toLowerCase(),
     readEmbedded: async track => {
-      const metadata = await require('music-metadata').parseFile(track, { skipCovers: true });
+      const audioPath = require('./ncm').isNcm(track) ? (await parser.ncm.prepare(track)).audioPath : track;
+      const metadata = await require('music-metadata').parseFile(audioPath, { skipCovers: true });
       const lyrics = metadata.common?.lyrics;
       return Array.isArray(lyrics) ? lyrics.find(value => typeof value === 'string') : typeof lyrics === 'string' ? lyrics : null;
     }

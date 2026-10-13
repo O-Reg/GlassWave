@@ -146,19 +146,21 @@ class AudioEngine {
 
   play() {
     this.ensureAudioContext();
+    if (this._pendingNcm) { this._pendingNcm.autoStart = true; return; }
     if (this.audio && this.audio.src) {
       return this.audio.play().catch(e => console.log('Autoplay deferred until user action:', e));
     }
   }
 
   pause() {
+    if (this._pendingNcm) this._pendingNcm.autoStart = false;
     if (this.audio) {
       this.audio.pause();
     }
   }
 
   togglePlayPause() {
-    if (this.isPlaying) {
+    if (this._pendingNcm ? this._pendingNcm.autoStart : this.isPlaying) {
       this.pause();
     } else {
       this.play();
@@ -166,6 +168,7 @@ class AudioEngine {
   }
 
   seek(seconds) {
+    if (this._pendingNcm && !isNaN(seconds)) { this._pendingNcm.seek = seconds; return; }
     if (this.audio && !isNaN(seconds)) {
       this.audio.currentTime = seconds;
     }
@@ -322,7 +325,9 @@ class AudioEngine {
     this.loadTrack(track, true);
   }
 
-  loadTrack(track, autoStart = true) {
+  async loadTrack(track, autoStart = true) {
+    const loadVersion = this._loadVersion = (this._loadVersion || 0) + 1;
+    this._pendingNcm = null;
     this.ensureAudioContext();
     this.currentTrack = track;
 
@@ -342,17 +347,38 @@ class AudioEngine {
     if (this.audio && track && track.path) {
       // Robust local file / relative path URL resolution
       let fileUrl = track.path;
-      if (!track.path.startsWith('http') && !track.path.startsWith('file://')) {
-        if (/^[a-zA-Z]:/.test(track.path)) {
-          const normalized = track.path.replace(/\\/g, '/');
+      let pendingSeek;
+      if (/\.ncm$/i.test(track.path)) {
+        this.pause();
+        const pending = this._pendingNcm = { autoStart };
+        try { fileUrl = await window.glasswaveAPI.resolveAudioPath(track.path); }
+        catch (error) {
+          if (this._loadVersion === loadVersion) {
+            this._pendingNcm = null;
+            this.audio.removeAttribute('src');
+            this.audio.load();
+            console.warn('NCM playback error:', error.message);
+            if (this.onPlaybackError) this.onPlaybackError(error.message);
+          }
+          return;
+        }
+        if (this._loadVersion !== loadVersion) return;
+        autoStart = pending.autoStart;
+        pendingSeek = pending.seek;
+        this._pendingNcm = null;
+      }
+      if (!fileUrl.startsWith('http') && !fileUrl.startsWith('file://')) {
+        if (/^[a-zA-Z]:/.test(fileUrl)) {
+          const normalized = fileUrl.replace(/\\/g, '/');
           const encoded = encodeURI(normalized).replace(/#/g, '%23').replace(/\?/g, '%3F');
           fileUrl = `file:///${encoded.replace(/^file:\/\/\//, '')}`;
         } else {
-          fileUrl = new URL(track.path, window.location.href).href;
+          fileUrl = new URL(fileUrl, window.location.href).href;
         }
       }
       this.audio.src = fileUrl;
       this.audio.load();
+      if (pendingSeek !== undefined) this.seek(pendingSeek);
 
       if (window.glasswaveAPI && window.glasswaveAPI.recordHistory) {
         window.glasswaveAPI.recordHistory(track.path);

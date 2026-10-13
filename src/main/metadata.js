@@ -2,11 +2,13 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const mm = require('music-metadata');
+const { NcmDecoder, isNcm } = require('./ncm');
 
 class MetadataParser {
   constructor(cacheDir, database = null) {
     this.cacheDir = cacheDir;
     this.db = database;
+    this.ncm = new NcmDecoder(cacheDir);
     this.coversDir = path.join(cacheDir, 'covers');
     if (!fs.existsSync(this.coversDir)) {
       fs.mkdirSync(this.coversDir, { recursive: true });
@@ -113,6 +115,11 @@ class MetadataParser {
     if (!targetPath) return null;
     try {
       if (targetPath.startsWith('data:') || targetPath.startsWith('http')) return targetPath;
+
+      if (isNcm(targetPath)) {
+        const track = await this.parseFile(targetPath);
+        return track.coverPath ? this.getCoverDataUrl(track.coverPath) : null;
+      }
 
       // Check memory cache first for instant 0ms return
       if (this.coverDataUrlCache.has(targetPath)) {
@@ -387,16 +394,27 @@ class MetadataParser {
   }
 
   async parseFile(filePath) {
+    // Keep the source path as the library identity; only playback uses the cache.
+    // Decode errors must reach the scanner/importer instead of creating bad tracks.
+    const ncm = isNcm(filePath) ? await this.ncm.prepare(filePath) : null;
+    const audioPath = ncm ? ncm.audioPath : filePath;
     try {
       const stats = fs.statSync(filePath);
       let metadata = {};
       try {
-        metadata = await mm.parseFile(filePath, { skipCovers: false });
+        metadata = await mm.parseFile(audioPath, { skipCovers: false });
       } catch (e) {
         console.warn('Metadata parse warning:', filePath, e.message);
       }
 
-      const common = metadata.common || {};
+      const common = { ...(metadata.common || {}) };
+      if (ncm) {
+        const tags = ncm.metadata;
+        if (!common.title && typeof tags.musicName === 'string') common.title = tags.musicName;
+        if (!common.album && typeof tags.album === 'string') common.album = tags.album;
+        if (!common.artist && Array.isArray(tags.artist)) common.artist = tags.artist
+          .filter(item => Array.isArray(item) && typeof item[0] === 'string').map(item => item[0]).join(' / ');
+      }
       const format = metadata.format || {};
 
       // Robust artist, title, album extraction
@@ -409,11 +427,13 @@ class MetadataParser {
       const duration = format.duration ? Math.round(format.duration) : 0;
 
       // Extract Cover Artwork via 7-level multi-strategy search (prioritizing native embedded picture)
-      const embeddedPic = this.extractEmbeddedPicture(metadata);
+      const embeddedPic = this.extractEmbeddedPicture(metadata) || (ncm?.cover.length ? {
+        data: ncm.cover, format: ncm.cover.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')) ? 'image/png' : 'image/jpeg'
+      } : null);
       const coverPath = this.findCoverArtwork(filePath, title, embeddedPic);
 
       // Extract Audio Spec for HiFi badge & audiophile inspector
-      const ext = path.extname(filePath).slice(1).toUpperCase();
+      const ext = path.extname(audioPath).slice(1).toUpperCase();
       const isLossless = format.lossless || ext === 'FLAC' || ext === 'WAV' || ext === 'APE' || ext === 'ALAC';
       const sampleRate = format.sampleRate || 44100;
       const bitsPerSample = format.bitsPerSample || (isLossless ? (ext === 'WAV' ? 24 : 16) : 16);
@@ -433,6 +453,7 @@ class MetadataParser {
       return {
         id: crypto.createHash('md5').update(filePath).digest('hex'),
         path: filePath,
+        ...(ncm ? { playbackPath: audioPath } : {}),
         title,
         titleNamingVersion: 2,
         artist,
@@ -456,6 +477,7 @@ class MetadataParser {
       return {
         id: crypto.createHash('md5').update(filePath).digest('hex'),
         path: filePath,
+        ...(ncm ? { playbackPath: audioPath } : {}),
         title: rawBase,
         titleNamingVersion: 2,
         artist: '未知艺术家',
