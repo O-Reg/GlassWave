@@ -1,10 +1,11 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, globalShortcut, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, globalShortcut, screen, nativeTheme, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
 const MetadataParser = require('./metadata');
 const LibraryDatabase = require('./database');
 const LibraryScanner = require('./scanner');
+const { WindowsMediaControls } = require('./windowsMediaControls');
 
 const featuredTrackPath = () => path.join(path.dirname(app.getPath('exe')), 'featured', 'The Pattern.wav');
 
@@ -56,6 +57,7 @@ function log(msg) {
 log('--- GlassWave Starting ---');
 
 let mainWindow = null;
+let mediaControls = null;
 let tray = null;
 let database = null;
 let parser = null;
@@ -182,19 +184,7 @@ function createTray() {
 }
 
 function registerGlobalMediaKeys() {
-  try {
-    globalShortcut.register('MediaPlayPause', () => {
-      if (mainWindow) mainWindow.webContents.send('media-play-pause');
-    });
-    globalShortcut.register('MediaNextTrack', () => {
-      if (mainWindow) mainWindow.webContents.send('media-next');
-    });
-    globalShortcut.register('MediaPreviousTrack', () => {
-      if (mainWindow) mainWindow.webContents.send('media-prev');
-    });
-  } catch (err) {
-    console.warn('Failed to register global shortcuts:', err);
-  }
+  mediaControls?.register();
 }
 
 function createWindow() {
@@ -226,6 +216,7 @@ function createWindow() {
   });
 
   mainWindow.refreshRoundedShape = require('./roundedWindow').attach(mainWindow);
+  mediaControls = new WindowsMediaControls({ window: mainWindow, globalShortcut, nativeImage, nativeTheme, ipcMain, powerMonitor, log });
   const htmlPath = path.join(__dirname, '../renderer/index.html');
   mainWindow.loadFile(htmlPath);
 
@@ -247,6 +238,7 @@ function createWindow() {
   });
 
   mainWindow.webContents.once('did-finish-load', () => {
+    mediaControls?.refresh();
     displayWindow();
   });
 
@@ -1248,6 +1240,7 @@ app.whenReady().then(() => {
 });
 
 app.on('will-quit', () => {
+  mediaControls?.dispose();
   scanner?.close();
   globalShortcut.unregisterAll();
   if (tray) { try { tray.destroy(); } catch (e) {} tray = null; }

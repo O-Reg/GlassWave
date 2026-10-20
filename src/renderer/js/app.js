@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const visualizer = new Visualizer('visualizer-canvas', audioEngine, colorEngine);
   const parallax = new MouseParallax('parallax-deck', 'album-wrap');
   const ui = new UIController(audioEngine, visualizer, colorEngine, parallax);
+  const systemMedia = window.GlassWaveSystemMedia.bind(audioEngine, api);
   window.ui = ui;
   window.appUI = ui;
   window.audioEngine = audioEngine;
@@ -40,6 +41,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 2. Track Change Sync & Persistence
   audioEngine.onTrackChange = (track) => {
+    systemMedia.sync();
     ui.updateTrackView(track);
     lyrics.setTrack(track);
     saveState();
@@ -123,10 +125,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
 
-    // Tray and media keyboard shortcuts
-    api.onMediaPlayPause(() => audioEngine.togglePlayPause());
-    api.onMediaNext(() => audioEngine.next());
-    api.onMediaPrev(() => audioEngine.previous());
+    // Media callbacks are bound before asynchronous library initialization.
   }
 
   // 4. "双击即播放" Launch Logic

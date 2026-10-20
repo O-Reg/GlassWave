@@ -110,6 +110,11 @@ contextBridge.exposeInMainWorld('glasswaveAPI', {
     ipcRenderer.on('library-updated', handler);
     return () => ipcRenderer.removeListener('library-updated', handler);
   },
+  updateMediaState: state => ipcRenderer.send('player-media-state', state),
+  sendMediaCommand: command => ipcRenderer.send('player-media-command', command),
+  onMediaPlay: callback => ipcRenderer.on('media-play', () => callback()),
+  onMediaPause: callback => ipcRenderer.on('media-pause', () => callback()),
+  onMediaStop: callback => ipcRenderer.on('media-stop', () => callback()),
   onMediaPlayPause: (callback) => ipcRenderer.on('media-play-pause', callback),
   onMediaNext: (callback) => ipcRenderer.on('media-next', callback),
   onMediaPrev: (callback) => ipcRenderer.on('media-prev', callback)

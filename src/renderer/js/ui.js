@@ -76,8 +76,7 @@ class UIController {
     this.currentSubView = 'all'; // 'all' | 'favorites' | 'recent' | 'added' | 'category:<id>'
     this.activeFilterTags = new Set();
     this.searchQuery = '';
-    this.sortBy = 'default'; // 'default' | 'title' | 'artist' | 'album' | 'dateAdded' | 'duration'
-    this.sortAsc = true;
+    this.restoreLibrarySortPreferences();
 
     // Multi-Selection State
     this.selectedTrackPaths = new Set();
@@ -648,7 +647,28 @@ class UIController {
     this.syncZenChromeForView();
   }
 
+  syncLibrarySearchPlacement() {
+    const cluster = document.getElementById('search-cluster');
+    const host = document.getElementById('library-search-host');
+    if (!cluster || !host) return;
+    const inLibrary = document.body.classList.contains('zen-mode') && this.currentView === 'library';
+    const destination = inLibrary ? host : document.querySelector('.titlebar-center');
+    const layoutChanged = host.hidden !== !inLibrary || (destination && cluster.parentElement !== destination);
+    if (destination && cluster.parentElement !== destination) {
+      const popover = document.getElementById('search-more-popover');
+      if (popover) { popover.classList.remove('open'); popover.style.display = 'none'; }
+      document.getElementById('btn-search-more')?.classList.remove('active');
+      destination.appendChild(cluster);
+    }
+    host.hidden = !inLibrary;
+    if (layoutChanged && this.currentView === 'library' && this.filteredTracks) {
+      this.updateVirtualScroll(true);
+      this.updateOverlayScrollbar();
+    }
+  }
+
   syncZenChromeForView() {
+    this.syncLibrarySearchPlacement();
     const body = document.body;
     const keepVisible = body.classList.contains('zen-mode') && this.currentView !== 'player';
     body.classList.toggle('zen-content-view', keepVisible);
@@ -2398,12 +2418,35 @@ class UIController {
   // =========================================================================
   // 8. Sorting, Filter Bar & Multi-Tag Combination (Requirement 6 & 7)
   // =========================================================================
+  restoreLibrarySortPreferences() {
+    let value;
+    try { value = window.GlassWaveLibrarySort?.read(localStorage); } catch {}
+    this.sortBy = value?.by || 'default';this.sortAsc = value?.asc ?? true;
+    this.sortDirections = value?.directions || {};
+  }
+
+  saveLibrarySortPreferences() {
+    try { this.sortDirections = window.GlassWaveLibrarySort.save(localStorage, this.sortBy, this.sortAsc, this.sortDirections).directions; } catch {}
+  }
+
+  syncSortControls() {
+    const api = window.GlassWaveLibrarySort;if (!api) return;
+    const label = document.getElementById('sort-selected-label');
+    if (label) label.textContent = api.MODES[this.sortBy] || api.MODES.default;
+    document.querySelectorAll('.sort-menu-item').forEach(item => item.classList.toggle('active', item.dataset.sort === this.sortBy));
+    const button = document.getElementById('btn-sort-dir'), icon = document.getElementById('sort-dir-svg');
+    if (button) { const text = api.directionLabel(this.sortBy, this.sortAsc);button.title = '当前：' + text + '（点击反转）';button.setAttribute('aria-label', '排序方向：' + text); }
+    if (icon) icon.innerHTML = this.sortAsc ? '<path d="M3 4h5M3 8h9M3 12h13m-3-3l3-3m0 0l3 3m-3-3v11"/>' : '<path d="M3 4h13M3 8h9M3 12h5m8 3l3 3m0 0l3-3m-3 3V8"/>';
+  }
+
   bindSortAndFilter() {
     const btnDropdown = document.getElementById('btn-sort-dropdown');
     const dropdownMenu = document.getElementById('sort-dropdown-menu');
     const selectedLabel = document.getElementById('sort-selected-label');
     const btnSortDir = document.getElementById('btn-sort-dir');
     const sortDirSvg = document.getElementById('sort-dir-svg');
+
+    this.syncSortControls();
 
     // SVG icons for sort direction (Ascending / Descending)
     const svgDesc = '<path d="M3 4h13M3 8h9M3 12h5m8 3l3 3m0 0l3-3m-3 3V8"/>';
@@ -2424,6 +2467,9 @@ class UIController {
           menuItems.forEach(i => i.classList.remove('active'));
           item.classList.add('active');
           this.sortBy = item.dataset.sort;
+          this.sortAsc = this.sortDirections?.[this.sortBy] ?? (this.sortBy !== 'dateAdded');
+          this.saveLibrarySortPreferences();
+          this.syncSortControls();
           if (selectedLabel) selectedLabel.textContent = item.textContent;
           dropdownMenu.style.display = 'none';
           btnDropdown.classList.remove('open');
@@ -2445,7 +2491,8 @@ class UIController {
         if (sortDirSvg) {
           sortDirSvg.innerHTML = this.sortAsc ? svgAsc : svgDesc;
         }
-        btnSortDir.title = this.sortAsc ? '当前：升序 (点击切换降序)' : '当前：降序 (点击切换升序)';
+        this.saveLibrarySortPreferences();
+        this.syncSortControls();
         this.applyFilterAndSort();
       };
     }
@@ -3116,31 +3163,13 @@ class UIController {
       });
     }
 
-    // 4. Sorting
-    if (this.sortBy && this.sortBy !== 'default') {
-      result.sort((a, b) => {
-        let valA, valB;
-        if (this.sortBy === 'title') {
-          valA = (a.title || '').localeCompare(b.title || '', 'zh-Hans-CN');
-          return this.sortAsc ? valA : -valA;
-        } else if (this.sortBy === 'artist') {
-          valA = (a.artist || '').localeCompare(b.artist || '', 'zh-Hans-CN');
-          return this.sortAsc ? valA : -valA;
-        } else if (this.sortBy === 'album') {
-          valA = (a.album || '').localeCompare(b.album || '', 'zh-Hans-CN');
-          return this.sortAsc ? valA : -valA;
-        } else if (this.sortBy === 'dateAdded') {
-          valA = (a.dateAdded || 0) - (b.dateAdded || 0);
-          return this.sortAsc ? valA : -valA;
-        } else if (this.sortBy === 'duration') {
-          valA = (a.duration || 0) - (b.duration || 0);
-          return this.sortAsc ? valA : -valA;
-        }
-        return 0;
-      });
-    }
+    // Sorting and letter navigation use one shared normalized title key.
+    const anchorPath = this.filteredTracks?.[this.lastSelectedTrackIndex]?.path;
+    result = window.GlassWaveLibrarySort ? window.GlassWaveLibrarySort.sortTracks(result, this.sortBy, this.sortAsc) : (this.sortAsc === false ? result.reverse() : result);
 
     this.filteredTracks = result;
+    if (anchorPath) this.lastSelectedTrackIndex = result.findIndex(track => track.path === anchorPath);
+    this.syncAlphabetIndex();
 
     const subBadge = document.getElementById('library-sub-count');
     if (subBadge) subBadge.textContent = `${this.filteredTracks.length} 首`;
@@ -3399,29 +3428,26 @@ class UIController {
   }
 
   getTrackInitialLetter(track) {
-    if (!track) return '#';
-    const title = (track.title || '').trim();
-    if (!title) return '#';
-    const firstChar = title.charAt(0).toUpperCase();
-    if (firstChar >= 'A' && firstChar <= 'Z') return firstChar;
-    if (/[\u4e00-\u9fa5]/.test(firstChar)) {
-      const pinyinBuckets = [
-        { char: '吖', letter: 'A' }, { char: '八', letter: 'B' }, { char: '嚓', letter: 'C' },
-        { char: '搭', letter: 'D' }, { char: '蛾', letter: 'E' }, { char: '发', letter: 'F' },
-        { char: '噶', letter: 'G' }, { char: '哈', letter: 'H' }, { char: '击', letter: 'J' },
-        { char: '喀', letter: 'K' }, { char: '垃', letter: 'L' }, { char: '妈', letter: 'M' },
-        { char: '拿', letter: 'N' }, { char: '哦', letter: 'O' }, { char: '趴', letter: 'P' },
-        { char: '七', letter: 'Q' }, { char: '然', letter: 'R' }, { char: '撒', letter: 'S' },
-        { char: '塌', letter: 'T' }, { char: '挖', letter: 'W' }, { char: '昔', letter: 'X' },
-        { char: '压', letter: 'Y' }, { char: '匝', letter: 'Z' }
-      ];
-      for (let i = pinyinBuckets.length - 1; i >= 0; i--) {
-        if (firstChar.localeCompare(pinyinBuckets[i].char, 'zh-Hans-CN') >= 0) {
-          return pinyinBuckets[i].letter;
-        }
-      }
+    return window.GlassWaveLibrarySort?.initial(track || {}) || '#';
+  }
+
+  syncAlphabetIndex() {
+    const bar = document.getElementById('alphabet-index-bar');if (!bar) return;
+    const visible = this.sortBy === 'title';bar.hidden = !visible;
+    document.getElementById('view-library')?.classList.toggle('has-alphabet-index', visible);
+    if (!visible) { this._currentHighlightedLetter = null;return; }
+    const indices = new Map();
+    (this.filteredTracks || []).forEach((track,index) => {const letter=this.getTrackInitialLetter(track);if(!indices.has(letter))indices.set(letter,index);});
+    this.alphabetFirstIndices = indices;
+    const letters = window.GlassWaveLibrarySort.LETTERS.slice();if (!this.sortAsc) letters.reverse();
+    for (const letter of letters) {
+      const element = bar.querySelector('[data-letter="' + letter + '"]');if (!element) continue;
+      const present = indices.has(letter);element.disabled = !present;
+      element.classList.toggle('disabled', !present);element.classList.remove('active');
+      element.setAttribute('aria-disabled', String(!present));element.title = present ? '跳转到 ' + letter : '没有以 ' + letter + ' 开头的歌曲';
+      bar.appendChild(element);
     }
-    return '#';
+    this._currentHighlightedLetter = null;
   }
 
   initAlphabetIndexBar() {
@@ -3432,13 +3458,15 @@ class UIController {
     const letters = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
 
     letters.forEach(letter => {
-      const el = document.createElement('div');
-      el.className = 'alphabet-letter';
+      const el = document.createElement('button');
+      el.className = 'alphabet-letter';el.type = 'button';
       el.dataset.letter = letter;
       el.textContent = letter;
       el.title = `跳转到 ${letter}`;
       bar.appendChild(el);
     });
+
+    this.syncAlphabetIndex();
 
     const handleJump = (targetEl) => {
       if (!targetEl || !targetEl.classList.contains('alphabet-letter')) return;
@@ -3476,30 +3504,12 @@ class UIController {
   }
 
   scrollToLetter(letter) {
-    if (!this.filteredTracks || !this.filteredTracks.length) return;
-    const scrollView = document.getElementById('track-list-scroll-view');
-    if (!scrollView) return;
-
-    let targetIndex = -1;
-    if (letter === '#') {
-      targetIndex = 0;
-    } else {
-      targetIndex = this.filteredTracks.findIndex(t => this.getTrackInitialLetter(t) === letter);
-      if (targetIndex === -1) {
-        targetIndex = this.filteredTracks.findIndex(t => {
-          const l = this.getTrackInitialLetter(t);
-          return l !== '#' && l.localeCompare(letter) >= 0;
-        });
-      }
-    }
-
-    if (targetIndex !== -1) {
-      scrollView.scrollTop = targetIndex * this.ROW_STRIDE;
-      if (this.resetScrollLerp) this.resetScrollLerp();
-      this.updateVirtualScroll();
-      this.updateOverlayScrollbar();
-      this.highlightAlphabetLetter(letter);
-    }
+    if (this.sortBy !== 'title' || !this.filteredTracks?.length) return;
+    const scrollView = document.getElementById('track-list-scroll-view');if (!scrollView) return;
+    const index = this.alphabetFirstIndices?.get(letter);
+    if (index === undefined) return;
+    scrollView.scrollTop = index * this.ROW_STRIDE;
+    this.resetScrollLerp?.();this.updateVirtualScroll();this.updateOverlayScrollbar();this.highlightAlphabetLetter(letter);
   }
 
   highlightAlphabetLetter(letter) {
@@ -3897,8 +3907,9 @@ class UIController {
     this.visibleEndIndex = endIndex;
 
     // Highlight active letter on vertical alphabet quick navigation bar
-    if (this.filteredTracks[startIndex]) {
-      const topLetter = this.getTrackInitialLetter(this.filteredTracks[startIndex]);
+    const topVisibleIndex = Math.floor(scrollTop / this.ROW_STRIDE);
+    if (this.sortBy === 'title' && this.filteredTracks[topVisibleIndex]) {
+      const topLetter = this.getTrackInitialLetter(this.filteredTracks[topVisibleIndex]);
       this.highlightAlphabetLetter(topLetter);
     }
 
@@ -6330,6 +6341,7 @@ class UIController {
       }
     }
 
+    this.syncLibrarySearchPlacement();
     this._zenSettleTimer=setTimeout(()=>{
       document.body.classList.remove('zen-switching');
       this.visualizer?.performSyncResize?.();

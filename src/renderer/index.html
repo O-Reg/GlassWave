@@ -502,6 +502,10 @@
                   <div class="sort-menu-item" data-sort="album">专辑</div>
                   <div class="sort-menu-item" data-sort="dateAdded">添加时间</div>
                   <div class="sort-menu-item" data-sort="duration">播放时长</div>
+                  <div class="sort-menu-item" data-sort="fileName">文件名称</div>
+                  <div class="sort-menu-item" data-sort="format">音频格式</div>
+                  <div class="sort-menu-item" data-sort="sampleRate">采样率</div>
+                  <div class="sort-menu-item" data-sort="bitrate">码率</div>
                 </div>
               </div>
 
@@ -518,6 +522,8 @@
             <button class="glass-pill-btn" id="btn-add-music-folder">+ 添加音乐文件夹</button>
           </div>
         </div>
+
+        <div id="library-search-host" class="library-search-host" hidden></div>
 
         <!-- Tag Multi-Filter Pill Bar -->
         <div class="tag-filter-bar" id="tag-filter-bar">
@@ -554,7 +560,7 @@
         </div>
 
         <!-- Vertical Alphabet Index Bar (A-Z + # Quick Navigation) -->
-        <div class="alphabet-index-bar" id="alphabet-index-bar"></div>
+        <div class="alphabet-index-bar" id="alphabet-index-bar" aria-label="歌曲名称字母索引" hidden></div>
 
         <!-- macOS-Style Overlay Capsule Scrollbar (Requirement 9) -->
         <div class="custom-overlay-scrollbar-track" id="tracklist-scrollbar-track">
@@ -2134,7 +2140,10 @@
   <script src="js/lyricTiming.js"></script>
   <script src="js/lyrics.js"></script>
   <script src="js/shortcuts.js"></script>
+<script src="assets/vendor/pinyin-pro-3.29.5.js"></script>
+  <script src="js/librarySort.js"></script>
 <script src="js/ui.js"></script>
+  <script src="js/systemMedia.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

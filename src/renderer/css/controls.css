@@ -311,3 +311,19 @@ body #view-visualizer-drawer .settings-content { scrollbar-gutter:stable; }
 body.zen-mode .glass-player-bar {
   transition:left 180ms cubic-bezier(.2,0,0,1),transform 180ms ease-out,opacity 180ms linear!important;
 }
+
+/* Reuse the existing search controls in the Zen library, keeping normal titlebar layout. */
+.library-search-host[hidden] { display: none !important; }
+.library-search-host { position: relative; z-index: 100; flex: 0 0 auto; min-width: 0; }
+#library-search-host .search-cluster { width: 100%; max-width: 700px; margin-inline: auto; }
+#library-search-host .glass-search-box,
+#library-search-host .glass-search-box:focus-within { width: 100%; min-width: 0; flex: 1 1 0; }
+#library-search-host #search-input { min-width: 0; }
+#library-search-host .search-more-popover { width: min(320px, 100%); max-height: min(520px, calc(100vh - 300px)); }
+
+#alphabet-index-bar[hidden] { display: none !important; }
+#view-library:not(.has-alphabet-index) .track-list-scroll-view { padding-right: 20px; }
+.alphabet-letter { border: 0; background: transparent; font-family: inherit; }
+.alphabet-letter.disabled { opacity: .25; cursor: default; pointer-events: none; transform: none; }
+.alphabet-letter:focus-visible { outline: 1px solid var(--accent-primary); outline-offset: 1px; }
+#sort-dropdown-menu { max-height: min(380px, calc(100vh - 180px)); overflow-y: auto; overscroll-behavior: contain; }
