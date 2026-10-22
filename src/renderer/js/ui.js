@@ -1619,7 +1619,10 @@ class UIController {
 
       // Scan dropped items recursively with duplicate detection
       const scanResult = await window.glasswaveAPI.scanDroppedItems(filePaths);
+      const importWarning = scanResult?.errors?.length
+        ? `；${scanResult.errors.length} 个文件导入失败：${scanResult.errors[0].message}` : '';
       if (!scanResult || !scanResult.tracks || scanResult.tracks.length === 0) {
+        if (importWarning) this.showToast(importWarning.slice(1));
         return;
       }
 
@@ -1658,9 +1661,9 @@ class UIController {
         this.switchView('player');
 
         if (autoAdd) {
-          this.showToast(`已自动入库并立即播放：${firstTrack.title || firstTrack.fileName || '音乐'}`);
+          this.showToast(`已自动入库并立即播放：${firstTrack.title || firstTrack.fileName || '音乐'}${importWarning}`);
         } else {
-          this.showToast(`已开始播放：${firstTrack.title || firstTrack.fileName || '音乐'}（即时临时播放）`);
+          this.showToast(`已开始播放：${firstTrack.title || firstTrack.fileName || '音乐'}（即时临时播放）${importWarning}`);
         }
       }
 

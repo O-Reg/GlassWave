@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.audioEngine = audioEngine;
   window.visualizer = visualizer;
   window.colorEngine = colorEngine;
+  audioEngine.onPlaybackError = message => ui.showToast(message);
   // A skin can reload the renderer; restore its visual tuning and current
   // window layout before asynchronous library loading yields the first frame.
   window.GlassWaveSkin?.restore(ui);

@@ -93,6 +93,7 @@ contextBridge.exposeInMainWorld('glasswaveAPI', {
   addCustomTag: (tag) => ipcRenderer.invoke('library-add-custom-tag', tag),
   removeCustomTag: (tag) => ipcRenderer.invoke('library-remove-custom-tag', tag),
   inspectAudioSpec: (filePath) => ipcRenderer.invoke('audio-inspect-spec', filePath),
+  resolveAudioPath: (filePath) => ipcRenderer.invoke('audio-resolve-path', filePath),
 
   // Playback History
   recordHistory: (trackPath) => ipcRenderer.invoke('library-record-history', trackPath),
