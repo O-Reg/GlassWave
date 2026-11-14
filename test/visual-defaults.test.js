@@ -5,6 +5,9 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const baseline = require('./fixtures/visual-defaults-1.2.1.json');
+// Newly requested idle/music separation controls are additive to the frozen visual baseline.
+for(const mode of ['wave','reactive'])Object.assign(baseline.glasswave_visual_tuning[mode],{playFlow:1,flowThreshold:.015,flowReturnMs:700});
+for(const mode of ['wave','reactive','curtain','spectrum','sphere','bars','orb','ambient'])Object.assign(baseline.glasswave_visual_tuning[mode],{responseMode:'original',responseMix:.5});
 
 function loadPreviewClasses() {
   const storage = new Map();

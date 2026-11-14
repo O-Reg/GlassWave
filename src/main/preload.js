@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('glasswaveAPI', {
   },
 
   onAnimationPaused: callback => ipcRenderer.on('window-animation-paused', (_, paused) => callback(paused)),
+  compatibleAudioSource: track => ipcRenderer.invoke('audio-compatible-source', track),
   // Window controls
   minimizeWindow: () => ipcRenderer.send('window-minimize'),
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
@@ -64,6 +65,7 @@ contextBridge.exposeInMainWorld('glasswaveAPI', {
   batchDeleteFiles: (paths) => ipcRenderer.invoke('library-batch-delete-files', paths),
   unhideAllTracks: () => ipcRenderer.invoke('library-unhide-all'),
   refreshTrack: (path) => ipcRenderer.invoke('library-refresh-track', path),
+  getLibraryCoverData: (path) => ipcRenderer.invoke('library-get-cover-thumbnail', path),
   getCoverData: (path) => ipcRenderer.invoke('library-get-cover-data', path),
   rescanEmbeddedCovers: () => ipcRenderer.invoke('library-rescan-embedded-covers'),
 

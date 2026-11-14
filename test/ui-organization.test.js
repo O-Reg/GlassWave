@@ -381,6 +381,15 @@ test('blank library background starts a window drag without leaving the library'
   assert.equal(classes.has('zen-dragging-window'), false);
   events.pointerup();
   assert.deepEqual(moves.at(-1), ['end']);
+  for(const flag of ['window-fullscreen','is-maximized']){
+    classes.add(flag);
+    const before=moves.length;
+    events.pointerdown({button:0,target:background,clientY:200,screenX:500,screenY:200});
+    assert.equal(moves.length,before,'stage clicks must not restore the window');
+    events.pointerdown({button:0,pointerId:5,target:background,clientY:12,screenX:500,screenY:12});
+    assert.equal(moves.length,before+1,'top strip starts thresholded drag even in Zen/fullscreen');
+    events.pointerup();classes.delete(flag);
+  }
 });
 
 test('titlebar gaps allow background dragging while search and audio controls stay interactive', () => {

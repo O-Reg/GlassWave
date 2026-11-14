@@ -59,11 +59,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         lastTrackPath: audioEngine.currentTrack ? audioEngine.currentTrack.path : null,
         currentTime: audioEngine.audio ? audioEngine.audio.currentTime : 0,
         volume: audioEngine.volume,
+        isMuted: audioEngine.isMuted,
         isShuffle: audioEngine.isShuffle,
         repeatMode: audioEngine.repeatMode,
         eq: audioEngine.getEQState(),
-        savedQueuePaths: (audioEngine.playbackQueue || []).map(t => t.path),
-        savedQueueIndex: audioEngine.queueIndex,
         playbackScope: audioEngine.playbackScope || { type: 'library' }
       };
       localStorage.setItem('glasswave_state', JSON.stringify(state));
@@ -72,6 +71,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
   window.glasswaveSaveState = saveState;
+  let saveTimer;
+  const scheduleStateSave = () => { clearTimeout(saveTimer);saveTimer=setTimeout(saveState,150); };
+  const previousEQChange = audioEngine.onEQChange;
+  audioEngine.onEQChange = value => { previousEQChange?.(value);scheduleStateSave(); };
+  audioEngine.onVolumeChange = scheduleStateSave;
+  window.addEventListener('beforeunload', () => { clearTimeout(saveTimer);saveState(); });
+  audioEngine.onPlaybackError = message => ui.showToast(message, 5000);
+  audioEngine.onPlaybackStatus = message => ui.showToast(message, 4000);
 
   setInterval(() => {
     if (audioEngine.isPlaying) saveState();
@@ -114,15 +121,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (e) {}
 
     // Subscribe to live background file system changes (add/modify/delete)
+    let pendingLibraryUpdate = null, libraryUpdateTimer = null;
     api.onLibraryUpdated((updatedTracks) => {
-      console.log('Library updated in real-time, total songs:', updatedTracks.length);
-      libraryTracks = updatedTracks;
-      ui.setTracks(updatedTracks);
-      // If queue is empty, populate from library; otherwise retain user's playback queue
-      if (!audioEngine.playbackQueue || audioEngine.playbackQueue.length === 0) {
-        audioEngine.playbackQueue = [...updatedTracks];
-        ui.renderQueue();
-      }
+      pendingLibraryUpdate = updatedTracks;
+      if (libraryUpdateTimer !== null) return;
+      libraryUpdateTimer = setTimeout(() => {
+        libraryUpdateTimer = null;
+        const tracks = pendingLibraryUpdate;pendingLibraryUpdate = null;
+        libraryTracks = tracks;
+        const started = performance.now();
+        ui.setTracks(tracks);
+        if (!audioEngine.playbackQueue || audioEngine.playbackQueue.length === 0) {
+          audioEngine.playbackQueue = [...tracks];ui.renderQueue();
+        }
+        const duration = performance.now() - started;
+        if (duration > 100) console.warn('[Performance] library-update', {tracks:tracks.length, durationMs:Math.round(duration)});
+      }, 120);
     });
 
     // Media callbacks are bound before asynchronous library initialization.
@@ -171,6 +185,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
         }
       }
+      if (saved.isMuted === true && !audioEngine.isMuted) audioEngine.toggleMute();
       if (saved.eq) {
         if (saved.eq.enabled !== undefined) audioEngine.setEQEnabled(saved.eq.enabled);
         if (saved.eq.gains && Array.isArray(saved.eq.gains)) {
@@ -225,7 +240,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // Restore seek position ONLY if NOT launchShuffle, rememberProgress is enabled, and saved.currentTime > 0
       if (!isLaunchShuffle && isRememberProgress && saved && saved.currentTime > 0) {
-        setTimeout(() => audioEngine.seek(saved.currentTime), 150);
+        if (audioEngine.audio.readyState >= 1) audioEngine.seek(saved.currentTime);
+        else audioEngine.audio.addEventListener('loadedmetadata', () => { if (audioEngine.currentTrack?.path === trackToPlay.path) audioEngine.seek(saved.currentTime); }, { once: true });
       }
       return;
     }

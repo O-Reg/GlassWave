@@ -1,7 +1,7 @@
 (function(root){
   function bind(engine,api){
     const audio=engine.audio,session=root.navigator?.mediaSession;let lastState='',lastTrack='';
-    const execute=command=>{const handlers={'play-pause':()=>engine.togglePlayPause(),play:()=>engine.play(),pause:()=>engine.pause(),next:()=>engine.next(),previous:()=>engine.previous(),stop:()=>{engine.pause();engine.seek(0);}};handlers[command]?.();};
+    const execute=command=>{const handlers={'play-pause':()=>engine.togglePlayPause(),play:()=>engine.play(),pause:()=>engine.pause(),next:()=>engine.next(),previous:()=>engine.previous(),stop:()=>{engine.pause();engine.seek(0);}};const result=handlers[command]?.();sync();if(result?.then)Promise.resolve(result).then(sync,sync);};
     for(const [name,command] of Object.entries({onMediaPlayPause:'play-pause',onMediaNext:'next',onMediaPrev:'previous',onMediaPlay:'play',onMediaPause:'pause',onMediaStop:'stop'}))api?.[name]?.(()=>execute(command));
     function sync(){
       const track=engine.currentTrack,playing=!!(audio&&!audio.paused&&!audio.ended),available=!!track||!!engine.playbackQueue?.length;
@@ -15,7 +15,7 @@
       }
     }
     if(session)for(const [action,command] of Object.entries({play:'play',pause:'pause',previoustrack:'previous',nexttrack:'next',stop:'stop'}))try{session.setActionHandler(action,()=>api?.sendMediaCommand?api.sendMediaCommand(command):execute(command));}catch{}
-    for(const event of ['play','pause','ended','loadedmetadata','durationchange','emptied','seeked','timeupdate'])audio?.addEventListener(event,sync);
+    for(const event of ['play','playing','pause','ended','loadedmetadata','durationchange','emptied','seeked','timeupdate'])audio?.addEventListener(event,sync);
     sync();return {sync};
   }
   root.GlassWaveSystemMedia={bind};

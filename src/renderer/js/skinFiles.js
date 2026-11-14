@@ -60,6 +60,7 @@
       const visible=localStorage.getItem('glasswave_display_'+key)!=='false';document.body.classList.toggle(cls,!visible);
       const button=document.getElementById(id);button?.classList.toggle('active',visible);const label=button?.querySelector('.dot-label');if(label)label.textContent=visible?'显示':'隐藏';
     }
+    window.GlassWaveDisplayElements?.restore(ui);
     const lyrics=window.lyricsController;
     if(lyrics){lyrics.settings=window.GlassWaveLyrics.settings(JSON.parse(localStorage.getItem('glasswave_lyrics_settings_v1')||'{}'));lyrics.applySettings();}
     ui.renderCustomPresets();ui.visualizer.performSyncResize?.();

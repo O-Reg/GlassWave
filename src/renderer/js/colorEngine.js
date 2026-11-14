@@ -353,7 +353,11 @@ class ColorEngine {
   }
 
   startRenderLoop() {
-    const render = () => {
+    let lastPaint=null;
+    const render = (now) => {
+      // Slow ambient motion keeps its existing 90Hz budget, independent of 180Hz ribbons.
+      if(lastPaint!==null && now-lastPaint<1000/90-.5){requestAnimationFrame(render);return;}
+      lastPaint=lastPaint===null?now:lastPaint+Math.max(1,Math.floor((now-lastPaint+.5)/(1000/90)))*(1000/90);
       if(document.body.classList.contains('direct-interaction')) {
         requestAnimationFrame(render);
         return;

@@ -43,10 +43,11 @@
 /* Album Art Glass Bezel Container */
 .album-art-wrap {
   position: relative;
+  --display-cover-base: clamp(210px, 22vw, 280px);
   width: clamp(210px, 22vw, 280px);
   height: clamp(210px, 22vw, 280px);
   aspect-ratio: 1 / 1;
-  margin-bottom: 20px;
+  margin-bottom: calc(20px * var(--display-gap-ratio, 1));
   perspective: 1000px;
   isolation: isolate;
 }
@@ -139,7 +140,7 @@
 }
 
 .track-title {
-  font-size: 26px;
+  font-size: calc(26px * var(--display-title-ratio, 1));
   font-weight: 700;
   letter-spacing: -0.3px;
   color: #ffffff;
@@ -156,7 +157,7 @@
 }
 
 .track-artist {
-  font-size: 15px;
+  font-size: calc(15px * var(--display-artist-ratio, 1));
   font-weight: 400;
   color: var(--text-muted);
   /* Soft natural ambient shadow */

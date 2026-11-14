@@ -1,0 +1,49 @@
+/* All song text remains visible while covers are loading or scrolling. */
+#track-list-scroll-view.is-fast-scrolling #track-list-container .track-row,
+#track-list-scroll-view #track-list-container .track-row.brush-in,
+#track-list-scroll-view #track-list-container .track-row.brush-in > * { opacity:1!important;animation:none!important;transition:none!important; }
+#library-display-mode { width:136px;max-width:100%;font-size:12px; }
+#library-display-label { display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted); }
+#view-library .stage-actions { flex-wrap:wrap;gap:8px; }
+#track-list-scroll-view[data-display-mode="largeList"] .track-row { padding:8px 14px; }
+#track-list-scroll-view[data-display-mode="largeList"] .track-row-thumb { width:72px;height:72px;border-radius:9px; }
+#track-list-scroll-view[data-display-mode="largeList"] .track-row-title { font-size:15px; }
+#track-list-scroll-view.library-cover-grid .track-row { padding:0;right:auto;border-radius:12px;overflow:hidden; }
+#track-list-scroll-view.library-cover-grid .track-row-thumb { width:100%;height:auto;aspect-ratio:1;margin:0;border-radius:10px 10px 0 0; }
+#track-list-scroll-view.library-cover-grid .track-row-thumb img { border-radius:0; }
+#track-list-scroll-view.library-cover-grid .track-row-thumb svg { width:30%;height:30%;opacity:.5; }
+#track-list-scroll-view.library-cover-grid .track-row-title,
+#track-list-scroll-view.library-cover-grid .track-row-artist { position:absolute;left:10px;right:10px;width:auto;margin:0;line-height:22px; }
+#track-list-scroll-view.library-cover-grid .track-row-title { bottom:30px;font-size:13px;font-weight:600; }
+#track-list-scroll-view.library-cover-grid .track-row-artist { bottom:7px;font-size:12px; }
+#track-list-scroll-view.library-cover-grid .track-row-index,
+#track-list-scroll-view.library-cover-grid .track-row-duration { display:none; }
+#track-list-scroll-view.library-cover-grid .track-row-fav { position:absolute;right:8px;top:8px;width:28px;height:28px;z-index:2;margin:0;border-radius:50%;background:rgba(10,15,25,.65);color:white; }
+#track-list-scroll-view.library-cover-grid .track-row-fav.is-fav { color:#ff718e; }
+#track-list-scroll-view[data-display-mode="full"] .track-row-thumb { height:100%; }
+#track-list-scroll-view[data-display-mode="full"] .track-row::after { content:'';position:absolute;inset:40% 0 0;background:linear-gradient(transparent,rgba(5,10,18,.9));pointer-events:none; }
+#track-list-scroll-view[data-display-mode="full"] .track-row-title,
+#track-list-scroll-view[data-display-mode="full"] .track-row-artist { z-index:1;color:#fff!important;text-shadow:0 1px 3px #000; }
+#track-list-scroll-view.library-cover-grid .track-row.playing { outline:2px solid #38bdf8;outline-offset:-2px; }
+#track-list-scroll-view.library-cover-grid .track-row.selected { box-shadow:inset 0 0 0 3px #a78bfa!important; }
+#track-list-scroll-view.library-cover-grid .track-row.playing.selected { outline-color:#38bdf8;box-shadow:inset 0 0 0 5px #a78bfa!important; }
+.library-folder-browser[hidden] { display:none!important; }
+.library-folder-browser { flex:0 0 auto;display:flex;flex-direction:column;gap:8px;padding-bottom:12px;min-height:0; }
+.library-folder-path { display:flex;align-items:center;gap:8px;min-width:0; }
+.library-folder-path span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--text-muted); }
+.library-subfolders { display:flex;gap:8px;overflow-x:auto;max-height:80px;padding:3px 1px 7px;scrollbar-width:thin;scrollbar-color:var(--text-dim) transparent; }
+.library-subfolder { flex:0 0 auto;min-width:130px;max-width:230px;text-align:left;border-radius:12px;padding:9px 12px; }
+.library-subfolder span { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.library-subfolder small { display:block;font-size:11px;color:var(--text-muted);margin-top:4px; }
+.music-folder-browse { cursor:pointer; }
+.music-folder-browse:hover { border-color:var(--accent-primary); }
+.folder-open-button { text-align:left;background:none;border:0;color:var(--text-main);cursor:pointer;min-width:0;padding:0;font:inherit; }
+.folder-open-button:hover { color:var(--accent-primary); }
+
+.library-folder-path label { flex:0 0 auto;white-space:nowrap;font-size:12px;color:var(--text-muted); }
+.library-subfolders::-webkit-scrollbar { height:5px; }
+.library-subfolders::-webkit-scrollbar-button { display:none; }
+.library-subfolders::-webkit-scrollbar-thumb { background:var(--text-dim);border-radius:999px; }
+
+.library-folder-path > button { flex:0 0 auto;white-space:nowrap;padding:7px 12px;font-size:12px;min-height:32px;line-height:1.2; }
+.library-folder-path > span { flex:1 1 auto;min-width:0; }

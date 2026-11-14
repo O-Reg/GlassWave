@@ -86,6 +86,7 @@ class UIController {
     this.ROW_STRIDE = 56; // 52px height + 4px margin
     this.BUFFER_ITEMS = 6; // Compact buffer for zero latency & maximum scroll FPS
     this.coverCache = new Map();
+    this.libraryCoverCache = new Map();
     this.pendingCoverRequests = new Set();
     this.visibleStartIndex = -1;
     this.visibleEndIndex = -1;
@@ -135,6 +136,7 @@ class UIController {
     this.bindVisualizerTuning();
     this.bindKeyboardShortcuts();
     this.bindSettings();
+    window.GlassWaveDisplayElements?.init(this);
     this.bindSearch();
     this.bindLibraryActions();
     this.bindContextMenu();
@@ -157,6 +159,7 @@ class UIController {
     this.bindQueueDrawer();
     this.bindDragAndDropImport();
     this.bindSortAndFilter();
+    this.bindLibraryDisplayModes();
     this.bindTagSystem();
     this.bindWindowResizing();
     this.bindBatchActions();
@@ -175,6 +178,7 @@ class UIController {
     this.bindAmbientGlowControls();
     window.GlassWaveShortcuts?.initMenu(this);
     this.organizeSettingsCategories();
+    this.bindPrimaryControlStates();
 
     // app.js owns the single filesystem update subscription.
 
@@ -418,6 +422,7 @@ class UIController {
     const luma=document.getElementById('row-bg-luma-threshold');
     const keyLabel=this.bgLumaColor==='white'?'白底透光阈值':this.bgLumaColor==='black'?'黑底透光阈值':'背景抠图阈值';
     group.append(row('setting-desktop-reveal','lbl-desktop-reveal','桌面透光程度'),row('setting-bg-luma-threshold','lbl-bg-luma-threshold',keyLabel));
+    group.append(row('setting-bg-edge-softness','lbl-bg-edge-softness','抠图边缘柔化'));
     group.append(luma.querySelector('.luma-color-grid'));
     group.append(luma.querySelector('.luma-preset-grid'));
     group.append(row('setting-window-glass-ratio','lbl-window-glass-ratio','界面亚克力通透度'));
@@ -681,6 +686,7 @@ class UIController {
   }
 
   updateLibraryHeader() {
+    this.renderLibraryFolderBrowser();
     const titleEl = document.getElementById('library-view-title');
     if (!titleEl) return;
 
@@ -692,6 +698,8 @@ class UIController {
       titleEl.innerHTML = '<svg style="width:18px;height:18px;vertical-align:-3px;margin-right:8px;fill:none;stroke:currentColor;stroke-width:1.8;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>最近播放';
     } else if (this.currentSubView === 'added') {
       titleEl.innerHTML = '<svg style="width:18px;height:18px;vertical-align:-3px;margin-right:8px;fill:none;stroke:currentColor;stroke-width:1.8;" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>最近添加';
+    } else if (this.currentSubView.startsWith('folder:')) {
+      titleEl.textContent='文件夹：'+window.GlassWaveLibraryBrowser.name(this.getLibraryFolder());
     } else if (this.currentSubView.startsWith('category:')) {
       const catId = this.currentSubView.split(':')[1];
       const cat = this.categories.find(c => c.id === catId);
@@ -703,6 +711,79 @@ class UIController {
   // =========================================================================
   // 3. Playback Controls & Timeline & Volume
   // =========================================================================
+  bindPrimaryControlStates() {
+    if(this._primaryControlsBound)return;
+    this._primaryControlsBound=true;
+    const sync=()=>this.syncPrimaryControlStates();
+    window.addEventListener('click',sync);
+    window.addEventListener('change',sync);
+    const previousEQ=this.audioEngine.onEQChange;
+    this.audioEngine.onEQChange=(...args)=>{previousEQ?.apply(this.audioEngine,args);sync();};
+    const previous=this.audioEngine.onVolumeChange;
+    this.audioEngine.onVolumeChange=(...args)=>{previous?.apply(this.audioEngine,args);sync();};
+    if(typeof MutationObserver==='function'){
+      const observer=new MutationObserver(sync);
+      observer.observe(document.body,{attributes:true,attributeFilter:['class']});
+      for(const id of ['glass-queue-drawer','glass-eq-modal']){
+        const panel=document.getElementById(id);
+        if(panel)observer.observe(panel,{attributes:true,attributeFilter:['class','style']});
+      }
+      window.addEventListener('pagehide',()=>observer.disconnect(),{once:true});
+    }
+    sync();
+  }
+
+  syncPrimaryControlStates() {
+    const engine=this.audioEngine;if(!engine)return;
+    const attr=(el,key,value)=>{if(el?.getAttribute?.(key)!==String(value))el?.setAttribute?.(key,String(value));};
+    const state=(id,on,label,expanded=false,value=on?'on':'off')=>{
+      const el=document.getElementById(id);if(!el)return null;
+      el.classList?.toggle('active',!!on);
+      attr(el,expanded?'aria-expanded':'aria-pressed',!!on);attr(el,'aria-label',label);attr(el,'data-state',value);
+      if(el.title!==label)el.title=label;
+      return el;
+    };
+    state('btn-shuffle',engine.isShuffle,engine.isShuffle?'随机播放：已开启（点击切换顺序播放）':'随机播放：已关闭（点击开启）');
+    const repeat=engine.repeatMode||'all';
+    const repeatButton=state('btn-repeat',repeat!=='none','循环模式：'+({none:'已关闭',all:'列表循环',one:'单曲循环'}[repeat]||'列表循环'),false,repeat);
+    for(const mode of ['none','all','one'])repeatButton?.classList?.toggle('mode-'+mode,repeat===mode);
+    const audio=engine.audio,playing=typeof audio?.paused==='boolean'?!audio.paused&&!audio.ended&&!audio.error:!!engine.isPlaying;
+    const play=document.getElementById('btn-play-pause');
+    const playIcon=document.getElementById('icon-play'),pauseIcon=document.getElementById('icon-pause');
+    if(playIcon)playIcon.style.display=playing?'none':'block';
+    if(pauseIcon)pauseIcon.style.display=playing?'block':'none';
+    attr(play,'aria-pressed',playing);attr(play,'aria-label',playing?'暂停（空格）':'播放（空格）');
+    if(play)play.title=playing?'暂停（空格）':'播放（空格）';
+    const volume=Number.isFinite(engine.volume)?engine.volume:.8,muted=!!engine.isMuted,silent=muted||volume<=0;
+    const volumeButton=state('btn-volume-icon',muted,muted?'已静音（点击取消静音）':volume<=0?'音量为 0（滚轮调节音量）':'音量 '+Math.round(volume*100)+'%（点击静音）',false,muted?'muted':silent?'zero':'sound');
+    if(volumeButton)volumeButton.style.opacity='1';
+    const soundIcon=document.getElementById('icon-vol-high'),muteIcon=document.getElementById('icon-vol-muted');
+    if(soundIcon)soundIcon.style.display=silent?'none':'block';
+    if(muteIcon)muteIcon.style.display=silent?'block':'none';
+    const queue=document.getElementById('glass-queue-drawer'),eq=document.getElementById('glass-eq-modal');
+    const queueOpen=!!queue?.classList?.contains('open'),eqOpen=!!eq?.classList?.contains('open')&&eq?.style?.display!=='none';
+    state('btn-queue-toggle',queueOpen,'当前播放队列：'+(queueOpen?'已打开':'已关闭'),true);
+    const reverb=window.GlassWaveReverb?.preset(engine.reverbPreset);
+    const reverbOn=!!reverb && reverb.id!=='off';
+    const eqOn=!!engine.eqEnabled && Array.isArray(engine.eqGains) &&
+      engine.eqGains.some(g=>Number.isFinite(Number(g)) && Math.abs(Number(g))>.001);
+    const eqButton=state('btn-toggle-eq',eqOpen,'音效设置；均衡：'+(eqOn?'已应用':engine.eqEnabled?'平直（原声）':'旁路（原声）')+'；混响：'+(reverbOn?reverb.name:'无'),true);
+    eqButton?.classList?.toggle('active',eqOn||reverbOn);
+    attr(eqButton,'data-eq-effect',eqOn?'on':'off');
+    attr(eqButton,'data-reverb-effect',reverbOn?'on':'off');
+    attr(eqButton,'data-reverb',reverbOn?reverb.id:'off');
+    attr(eqButton,'data-state',eqOn?(reverbOn?'eq-reverb':'eq'):(reverbOn?'reverb':'dry'));
+    const lyrics=document.getElementById('btn-toggle-lyrics');
+    if(lyrics)state('btn-toggle-lyrics',lyrics.classList.contains('active'),'歌词：'+(lyrics.classList.contains('active')?'已开启':'已关闭')+'（右键打开设置）');
+    const pin=this.pinMode||'off';
+    state('btn-pin-mode',pin!=='off','窗口置顶：'+({off:'不置顶',playing:'播放时置顶',always:'永久置顶'}[pin]||'不置顶'),false,pin);
+    const body=document.body?.classList||{contains:()=>false};
+    state('btn-zen-mode',body.contains('zen-mode'),body.contains('zen-mode')?'退出极简模式':'进入极简模式');
+    state('btn-mini-mode',body.contains('mini-bar-mode'),body.contains('mini-bar-mode')?'退出长条模式':'进入长条模式');
+    const filled=body.contains('window-fullscreen')||body.contains('is-maximized');
+    state('btn-maximize',filled,filled?'还原窗口 / 退出全屏':'全屏 / 最大化');
+  }
+
   bindPlaybackControls() {
     const btnPlayPause = document.getElementById('btn-play-pause');
     const btnPrev = document.getElementById('btn-prev');
@@ -732,6 +813,7 @@ class UIController {
         this.audioEngine.setShuffle(!this.audioEngine.isShuffle);
         btnShuffle.classList.toggle('active', this.audioEngine.isShuffle);
         btnShuffle.title = this.audioEngine.isShuffle ? '随机播放: 已开启 (向前记录历史，向后随机探索)' : '随机播放: 已关闭 (顺序播放)';
+        this.syncPrimaryControlStates();
         if (window.glasswaveSaveState) window.glasswaveSaveState();
       };
     }
@@ -749,6 +831,7 @@ class UIController {
           btnRepeat.className = 'ctrl-btn mode-none';
           btnRepeat.title = '循环模式: 已关闭 (顺序播放 / 播放完停止)';
         }
+        this.syncPrimaryControlStates();
       };
       this.updateRepeatUI = updateRepeatUI;
       updateRepeatUI();
@@ -762,6 +845,7 @@ class UIController {
           this.audioEngine.repeatMode = 'all';
         }
         updateRepeatUI();
+        this.syncPrimaryControlStates();
         if (window.glasswaveSaveState) window.glasswaveSaveState();
       };
     }
@@ -777,6 +861,7 @@ class UIController {
         hudPlay.style.display = isPlaying ? 'none' : 'block';
         hudPause.style.display = isPlaying ? 'block' : 'none';
       }
+      this.syncPrimaryControlStates();
       this.highlightCurrentPlayingInList();
       if (this.pinMode === 'playing') {
         this.syncAlwaysOnTop(isPlaying);
@@ -825,7 +910,7 @@ class UIController {
         const ratio = getRatio(e);
         updateVisual(ratio);
         const duration = this.audioEngine.audio ? this.audioEngine.audio.duration : 0;
-        if (duration > 0) this.audioEngine.seek(ratio * duration);
+        if (duration > 0) this.audioEngine.beginScrub?.();
 
         const onMouseMove = (ev) => {
           if (!this.isDraggingTimeline) return;
@@ -839,14 +924,21 @@ class UIController {
           track.classList.remove('dragging');
           window.removeEventListener('mousemove', onMouseMove);
           window.removeEventListener('mouseup', onMouseUp);
+          window.removeEventListener('blur', onCancel);
           const r = getRatio(ev);
           updateVisual(r);
           const dur = this.audioEngine.audio ? this.audioEngine.audio.duration : 0;
-          if (dur > 0) this.audioEngine.seek(r * dur);
+          if (dur > 0) { if (this.audioEngine.endScrub) this.audioEngine.endScrub(r * dur); else this.audioEngine.seek(r * dur); }
+          else this.audioEngine.cancelScrub?.();
         };
 
+        const onCancel = () => {
+          this.isDraggingTimeline = false;track.classList.remove('dragging');this.audioEngine.cancelScrub?.();
+          window.removeEventListener('mousemove', onMouseMove);window.removeEventListener('mouseup', onMouseUp);window.removeEventListener('blur', onCancel);
+          this.audioEngine.onTimeUpdate?.(this.audioEngine.audio.currentTime, this.audioEngine.audio.duration || 0);
+        };
         window.addEventListener('mousemove', onMouseMove);
-        window.addEventListener('mouseup', onMouseUp);
+        window.addEventListener('mouseup', onMouseUp);window.addEventListener('blur', onCancel);
       });
     }
   }
@@ -881,6 +973,7 @@ class UIController {
     const max = parseFloat(slider.max) || 1;
     const pct = Math.max(0, Math.min(100, Math.round(((effectiveVol - min) / (max - min)) * 100)));
     slider.style.setProperty('--val-pct', `${pct}%`);
+    this.syncPrimaryControlStates();
   }
 
   showVolumeSliderTooltip(pct) {
@@ -888,7 +981,8 @@ class UIController {
     const iconEl = document.getElementById('vol-tip-icon');
     const pctEl = document.getElementById('vol-tip-pct');
     if (!tip) return;
-    if (iconEl) iconEl.innerHTML = this.getVolumeIconSvg(pct);
+    const icon = this.getVolumeIconSvg(pct);
+    if (iconEl && iconEl._volumeIcon !== icon) { iconEl.innerHTML = icon; iconEl._volumeIcon = icon; }
     if (pctEl) pctEl.textContent = `${pct}%`;
     tip.classList.add('visible');
     if (this._volTipTimer) clearTimeout(this._volTipTimer);
@@ -908,12 +1002,14 @@ class UIController {
       document.body.appendChild(hud);
     }
     const pct = Math.round(vol * 100);
-    const iconSvg = this.getVolumeIconSvg(pct);
-
-    hud.innerHTML = `
-      <div class="hud-icon">${iconSvg}</div>
-      <div class="hud-text">${pct}%</div>
-    `;
+    if (!hud._volumeText) {
+      hud.innerHTML = '<div class="hud-icon"></div><div class="hud-text"></div>';
+      hud._volumeIcon = hud.querySelector('.hud-icon');
+      hud._volumeText = hud.querySelector('.hud-text');
+    }
+    const icon = this.getVolumeIconSvg(pct);
+    if (hud._lastIcon !== icon) { hud._volumeIcon.innerHTML = icon; hud._lastIcon = icon; }
+    hud._volumeText.textContent = `${pct}%`;
     hud.classList.add('visible');
 
     if (this._volumeHudTimer) clearTimeout(this._volumeHudTimer);
@@ -942,15 +1038,20 @@ class UIController {
     const newVol = Math.round(newPct) / 100;
     this.audioEngine.setVolume(newVol);
 
+    // Audio is committed immediately. Only cosmetic feedback is latest-only;
+    // never put gain changes on the visualizer's pausable animation clock.
     const slider = document.getElementById('volume-slider');
-    if (slider) slider.value = newVol;
-    this.updateVolumeSliderFill(newVol);
-    this.showVolumeSliderTooltip(newPct);
-    const btnVolIcon = document.getElementById('btn-volume-icon');
-    if (btnVolIcon) {
-      btnVolIcon.style.opacity = newVol === 0 ? '0.4' : '1.0';
+    if (slider) {
+      slider.value = newVol;
+      slider.style.setProperty('--val-pct', `${this.audioEngine.isMuted ? 0 : newPct}%`);
     }
-    this.showVolumeHud(newVol);
+    if (!this._wheelFeedbackTimer) this._wheelFeedbackTimer = setTimeout(() => {
+      this._wheelFeedbackTimer = null;
+      const volume = this.audioEngine.volume;
+      this.syncPrimaryControlStates();
+      this.showVolumeSliderTooltip(Math.round(volume * 100));
+      this.showVolumeHud(volume);
+    }, 16);
   }
 
   bindVolume() {
@@ -990,31 +1091,29 @@ class UIController {
       });
     }
 
-    // Direct wheel volume control on audio slider bar, wrapper & volume button
-    const handleVolumeWheel = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.adjustVolumeByWheel(e.deltaY < 0);
-    };
-
-    if (slider) {
-      slider.addEventListener('wheel', handleVolumeWheel, { passive: false });
-    }
-    if (sliderWrap) {
-      sliderWrap.addEventListener('wheel', handleVolumeWheel, { passive: false });
-    }
+    // The capture listener below owns wheel volume, including these controls.
     if (btnVolIcon) {
-      btnVolIcon.addEventListener('wheel', handleVolumeWheel, { passive: false });
       btnVolIcon.onclick = () => {
-        const muted = this.audioEngine.toggleMute();
-        btnVolIcon.style.opacity = muted ? '0.4' : '1.0';
+        this.audioEngine.toggleMute();
         this.updateVolumeSliderFill();
       };
     }
   }
 
   bindGlobalVolumeWheel() {
+    if (this._volumeWheelBound) return;
+    this._volumeWheelBound = true;
     window.addEventListener('wheel', (e) => {
+      if(e.defaultPrevented || e.ctrlKey || !Number.isFinite(e.deltaY) || e.deltaY===0)return;
+      const consumeVolume = () => {
+        e.preventDefault();
+        e.stopPropagation?.();
+        // A busy renderer must not replay old wheel notches seconds later.
+        const stamp = Number(e.timeStamp);
+        const now = stamp > 1e12 ? Date.now() : (typeof performance !== 'undefined' ? performance.now() : stamp);
+        if (stamp > 0 && now - stamp > 250) return;
+        this.adjustVolumeByWheel(e.deltaY < 0);
+      };
       const target = e.target;
       const el = (target && typeof target.closest === 'function')
         ? target
@@ -1022,11 +1121,12 @@ class UIController {
 
       // 1. Direct Volume Control: scrolling directly on volume slider, wrapper or icon always adjusts volume
       if (el.closest('#volume-slider, .volume-slider-wrap, #btn-volume-icon')) {
-        e.preventDefault();
-        this.adjustVolumeByWheel(e.deltaY < 0);
+        consumeVolume();
         return;
       }
 
+      const isInside = rect => e.clientX>=rect.left && e.clientX<=rect.right &&
+        e.clientY>=rect.top && e.clientY<=rect.bottom;
       const drawer = document.getElementById('glass-queue-drawer');
       const isDrawerOpen = drawer && drawer.classList.contains('open');
 
@@ -1034,7 +1134,7 @@ class UIController {
       if (isDrawerOpen) {
         const dRect = drawer.getBoundingClientRect();
         // If cursor is physically inside the right menu envelope (clientX >= left boundary)
-        if (e.clientX >= dRect.left || el.closest('#glass-queue-drawer')) {
+        if (isInside(dRect) || el.closest('#glass-queue-drawer')) {
           // Inside the menu: strictly DO NOT adjust volume!
           const list = document.getElementById('queue-track-list');
           if (list && !el.closest('#queue-track-list')) {
@@ -1051,7 +1151,7 @@ class UIController {
       const isSettingsOpen = settingsDrawer && settingsDrawer.classList.contains('open');
       if (isSettingsOpen) {
         const sRect = settingsDrawer.getBoundingClientRect();
-        if (e.clientX >= sRect.left || el.closest('#view-settings, .glass-settings-drawer, .settings-content')) {
+        if (isInside(sRect) || el.closest('#view-settings, .glass-settings-drawer, .settings-content')) {
           const sContent = settingsDrawer.querySelector('.settings-content');
           if (sContent && !el.closest('.settings-content')) {
             const step = e.deltaMode === 1 ? e.deltaY * 40 : (e.deltaMode === 2 ? e.deltaY * window.innerHeight : e.deltaY);
@@ -1073,21 +1173,21 @@ class UIController {
         el.closest('.category-icon-picker') ||
         el.closest('#category-context-menu, #glass-context-menu') ||
         el.closest('.lyrics-scroll-container, .lyrics-settings-panel') ||
-        el.closest('input[type="range"]')
+        el.closest('input[type="range"], select, textarea, [contenteditable="true"]') ||
+        el.closest('#view-visualizer-drawer, .search-more-popover, .glass-hifi-popover, .snap-layouts-popover') ||
+        el.closest('.glass-modal, .glass-modal-backdrop, .glass-modal-card, .glass-confirm-dialog, [role="dialog"]')
       ) {
         return;
       }
 
-      // Check if on playback interface: strictly currentView is 'player'
-      // When viewing settings, library, or folders (even in zen-mode), allow normal scrolling of that view!
-      if (this.currentView !== 'player') {
-        return;
-      }
+      // Window controls are shared by every page, including the compact strip.
+      // Content panes above retain their own scrolling; only the chrome bypasses the view gate.
+      const onChrome=el.closest('#titlebar, .glass-player-bar, .zen-floating-toggle, #fullscreen-exit-control');
+      if (this.currentView !== 'player' && !onChrome) return;
 
       // Adjust volume on playback background: fixed 5% step with direction-aware snap
-      e.preventDefault();
-      this.adjustVolumeByWheel(e.deltaY < 0);
-    }, { passive: false });
+      consumeVolume();
+    }, { passive: false, capture: true });
   }
 
   bindVisualizerTabs() {
@@ -1213,6 +1313,7 @@ class UIController {
     }
     this._lastToggleFullscreenTime = now;
     if (window.glasswaveAPI && window.glasswaveAPI.toggleFullscreen) {
+      this.visualizer?.freezeTransition?.(600);
       window.glasswaveAPI.toggleFullscreen();
     }
   }
@@ -1244,8 +1345,6 @@ class UIController {
         }
       };
       exitControl.addEventListener('click', handleExit);
-      exitControl.addEventListener('pointerup', handleExit);
-      exitControl.onclick = handleExit;
     }
 
     // Esc restores fullscreen; configurable F11 is handled by GlassWaveShortcuts.
@@ -1279,10 +1378,13 @@ class UIController {
 
       if (window.glasswaveAPI.onFullscreenState) {
         window.glasswaveAPI.onFullscreenState((isFs) => {
+          const changed = document.body.classList.contains('window-fullscreen') !== !!isFs;
           document.body.classList.toggle('window-fullscreen', isFs);
+          document.body.classList.toggle('is-maximized', isFs);
           updateMaxBtn();
-          if (this.visualizer && this.visualizer.performSyncResize) {
-            setTimeout(() => this.visualizer.performSyncResize(), 60);
+          if (changed) {
+            if (this.visualizer?.isFrozenForTransition) this.visualizer.unfreezeTransition();
+            else { this.visualizer?.performSyncResize?.();this.visualizer?.render?.(); }
           }
           document.body.classList.remove('fullscreen-transitioning');
         });
@@ -1300,6 +1402,35 @@ class UIController {
   // =========================================================================
   // 4. Instant Fuzzy Search (Requirement 2)
   // =========================================================================
+  restoreSearchPlaybackScope() {
+    const session = this._searchPlaybackSession;
+    this._searchPlaybackSession = null;
+    const engine = this.audioEngine;
+    if (!session || !engine) return;
+    // Respect explicit queue edits made while searching.
+    const queue = engine.playbackQueue;
+    if (queue !== session.queue || queue.length !== session.paths.length ||
+        queue.some((t, i) => t.path !== session.paths[i])) return;
+    let tracks = [...this.allTracks];
+    const known = new Set(tracks.map(t => t.path));
+    for (const t of queue) if (t?.path && !known.has(t.path)) { tracks.push(t); known.add(t.path); }
+    let scope = session.scope;
+    if (scope.type === 'folder') {
+      const api=window.GlassWaveLibraryBrowser;tracks=tracks.filter(t=>scope.includeSubfolders?api.inside(t.path,scope.folderPath):api.direct(t.path,scope.folderPath));
+    }
+    if (scope.type === 'category') {
+      const category = this.categories.find(c => c.id === scope.categoryId);
+      if (category) {
+        const paths = new Set(category.trackPaths || []);
+        tracks = tracks.filter(t => paths.has(t.path));
+      } else scope = { type: 'library' };
+    }
+    const current = engine.currentTrack;
+    const index = tracks.findIndex(t => t.path === current?.path);
+    // Never restart, seek, or replace the media source to change playback scope.
+    if (index >= 0) engine.setQueue(tracks, index, scope);
+  }
+
   bindSearch() {
     const searchInput = document.getElementById('search-input');
     const searchBox = document.querySelector('.glass-search-box');
@@ -1320,29 +1451,26 @@ class UIController {
 
     const performSearch = () => {
       const query = searchInput.value.trim().toLowerCase();
+      const wasSearching = !!this.searchQuery;
       this.searchQuery = query;
 
       if (btnClear) {
-        btnClear.style.display = query ? 'block' : 'none';
+        searchBox?.classList.toggle('has-search-query', !!query);
+        btnClear.disabled = !query;
+        btnClear.setAttribute('aria-hidden', String(!query));
       }
 
-      // If user is searching on Player stage, automatically open Library stage to view results
-      if (query) {
-        if (this.currentSubView !== 'all') {
-          if (!this._prevSubViewBeforeSearch) {
-            this._prevSubViewBeforeSearch = this.currentSubView;
-          }
-          this.currentSubView = 'all';
-          this.renderSidebarActiveState();
-        }
-        const activeNav = document.querySelector('.nav-item.active');
-        if (activeNav && activeNav.dataset.view === 'player') {
-          this.switchView('library', 'all');
-        }
-      } else if (this._prevSubViewBeforeSearch) {
-        this.currentSubView = this._prevSubViewBeforeSearch;
-        this._prevSubViewBeforeSearch = null;
-        this.renderSidebarActiveState();
+      if (query && this.currentView === 'player') {
+        const scope = this.audioEngine.playbackScope;
+        if(scope?.type==='folder'){this.libraryIncludeSubfolders=!!scope.includeSubfolders;this.libraryFolderRoot=scope.folderPath;}
+        const category = scope?.type === 'category' && this.categories?.find(c => c.id === scope.categoryId);
+        this.switchView('library', category ? `category:${category.id}` : scope?.type==='folder'?'folder:'+encodeURIComponent(scope.folderPath):'all');
+      }
+      if (!query && wasSearching) this.restoreSearchPlaybackScope();
+      if (btnClear) {
+        const label = this.currentSubView?.startsWith('folder:')?'清空搜索，返回当前文件夹':this.currentSubView?.startsWith('category:') ? '清空搜索，返回当前分类' : '清空搜索，恢复曲库播放范围';
+        btnClear.title = label;
+        btnClear.setAttribute('aria-label', label);
       }
 
       this.applyFilterAndSort();
@@ -2112,7 +2240,7 @@ class UIController {
     if (idx === -1) return;
 
     const clientH = scrollView.clientHeight || 600;
-    const targetScroll = Math.max(0, Math.round(idx * this.ROW_STRIDE - (clientH - this.ROW_STRIDE) / 2));
+    const targetScroll = Math.max(0, Math.round(Math.floor(idx / this.getLibraryLayout().columns) * this.getLibraryLayout().stride - (clientH - this.getLibraryLayout().stride) / 2));
 
     const applyScroll = () => {
       if (smooth) {
@@ -3097,7 +3225,67 @@ class UIController {
   // =========================================================================
   // 10. Filter & Sort Execution Logic
   // =========================================================================
-  applyFilterAndSort() {
+  bindLibraryDisplayModes() {
+    const api=window.GlassWaveLibraryBrowser,view=document.getElementById('view-library');
+    if(!api||!view)return;
+    try{this.libraryDisplayMode=localStorage.getItem('glasswave_library_view_v1')||'list';}catch{this.libraryDisplayMode='list';}
+    if(!Object.hasOwn(api.MODES,this.libraryDisplayMode))this.libraryDisplayMode='list';
+    const label=document.createElement('label');label.id='library-display-label';label.textContent='显示';
+    const select=document.createElement('select');select.id='library-display-mode';select.className='glass-select';select.setAttribute('aria-label','曲库显示方式');
+    for(const [id,name] of Object.entries(api.MODES))select.add(new Option(name,id));
+    select.value=this.libraryDisplayMode;label.appendChild(select);view.querySelector('.stage-actions')?.prepend(label);
+    const scroll=document.getElementById('track-list-scroll-view');
+    const apply=()=>{scroll.dataset.displayMode=this.libraryDisplayMode;scroll.classList.toggle('library-cover-grid',['small','large','full'].includes(this.libraryDisplayMode));};apply();
+    select.onchange=()=>{
+      const old=this.getLibraryLayout(),anchor=Math.floor(scroll.scrollTop/old.stride)*old.columns;
+      this.resetScrollLerp?.();this.libraryDisplayMode=select.value;apply();
+      try{localStorage.setItem('glasswave_library_view_v1',this.libraryDisplayMode);}catch{}
+      this.renderTrackList();scroll.scrollTop=api.offset(anchor,this.getLibraryLayout());this.resetScrollLerp?.();this.updateVirtualScroll(true);this.updateOverlayScrollbar();
+    };
+  }
+
+  getLibraryLayout() {
+    const scroll=document.getElementById('track-list-scroll-view'),container=document.getElementById('track-list-container');
+    const width=container?.clientWidth||scroll?.clientWidth||800;
+    return window.GlassWaveLibraryBrowser?.layout(this.libraryDisplayMode,width,this.filteredTracks?.length||0)||
+      {grid:false,columns:1,cellWidth:width,height:this.ROW_STRIDE-4,stride:this.ROW_STRIDE,totalHeight:(this.filteredTracks?.length||0)*this.ROW_STRIDE};
+  }
+
+  openLibraryFolder(folder,root) {
+    const api=window.GlassWaveLibraryBrowser;if(!api)return;
+    if(this.searchQuery)document.getElementById('btn-search-clear')?.click();
+    this.libraryFolderRoot=api.normalize(root||folder);
+    this.switchView('library','folder:'+encodeURIComponent(api.normalize(folder)));
+  }
+
+  getLibraryFolder() {
+    if(!this.currentSubView?.startsWith('folder:'))return null;
+    try{return decodeURIComponent(this.currentSubView.slice(7));}catch{return null;}
+  }
+
+  renderLibraryFolderBrowser() {
+    const api=window.GlassWaveLibraryBrowser,view=document.getElementById('view-library');if(!api||!view)return;
+    let host=document.getElementById('library-folder-browser');
+    if(!host){host=document.createElement('div');host.id='library-folder-browser';host.className='library-folder-browser';view.querySelector('.tag-filter-bar')?.before(host);}
+    const folder=this.getLibraryFolder();host.hidden=!folder;if(!folder)return;
+    const root=this.libraryFolderRoot&& (api.key(folder)===api.key(this.libraryFolderRoot)||api.inside(folder,this.libraryFolderRoot))?this.libraryFolderRoot:folder;
+    host.replaceChildren();
+    const path=document.createElement('div');path.className='library-folder-path';
+    const back=document.createElement('button');back.className='glass-pill-btn';back.textContent='← 上一级';back.onclick=()=>api.key(folder)===api.key(root)?this.switchView('folders'):this.openLibraryFolder(api.parent(folder),root);path.append(back);
+    const home=document.createElement('button');home.className='glass-pill-btn';home.textContent='全部目录';home.onclick=()=>this.switchView('folders');path.append(home);
+    const text=document.createElement('span');text.textContent=folder;text.title=folder;path.append(text);
+    const label=document.createElement('label'),include=document.createElement('input');include.type='checkbox';include.checked=!!this.libraryIncludeSubfolders;
+    include.onchange=()=>{this.libraryIncludeSubfolders=include.checked;this.applyFilterAndSort();};label.append(include,document.createTextNode('含子目录'));path.append(label);host.append(path);
+    const children=document.createElement('div');children.className='library-subfolders';children.setAttribute('aria-label','子文件夹');
+    for(const child of api.folders(this.allTracks,folder)){
+      const button=document.createElement('button');button.className='glass-pill-btn library-subfolder';button.title=child.path;
+      const name=document.createElement('span');name.textContent='▱ '+child.name;const count=document.createElement('small');count.textContent=child.count+' 首歌曲';button.append(name,count);
+      button.onclick=()=>this.openLibraryFolder(child.path,root);children.append(button);
+    }
+    host.append(children);
+  }
+
+  applyFilterAndSort(options = {}) {
     let result = [...this.allTracks];
 
     // Include any temporarily dropped/queued tracks that are not yet in database so they are instantly searchable
@@ -3122,6 +3310,9 @@ class UIController {
       }
     } else if (this.currentSubView === 'added') {
       result.sort((a, b) => (b.dateAdded || 0) - (a.dateAdded || 0));
+    } else if (this.currentSubView.startsWith('folder:')) {
+      const api=window.GlassWaveLibraryBrowser,folder=this.getLibraryFolder();
+      result=result.filter(t=>this.libraryIncludeSubfolders?api.inside(t.path,folder):api.direct(t.path,folder));
     } else if (this.currentSubView.startsWith('category:')) {
       const catId = this.currentSubView.split(':')[1];
       const cat = this.categories.find(c => c.id === catId);
@@ -3175,7 +3366,7 @@ class UIController {
     if (subBadge) subBadge.textContent = `${this.filteredTracks.length} 首`;
 
     const scrollView = document.getElementById('track-list-scroll-view');
-    if (scrollView) scrollView.scrollTop = 0;
+    if (scrollView && !options.preserveScroll) scrollView.scrollTop = 0;
     this.renderTrackList();
   }
 
@@ -3209,7 +3400,8 @@ class UIController {
 
     // Pre-create image and SVG placeholder to completely avoid innerHTML allocations during high-speed scroll
     const thumbImg = document.createElement('img');
-    thumbImg.alt = '';
+    thumbImg.alt = '';thumbImg.decoding='async';
+    thumbImg.onload=()=>{if(row._currentCoverSrc===thumbImg.getAttribute('src')){thumbImg.style.display='block';thumbSvg.style.display='none';}};
     thumbImg.style.display = 'none';
     thumbImg.onerror = () => {
       thumbImg.style.display = 'none';
@@ -3254,6 +3446,7 @@ class UIController {
   }
 
   updatePoolRow(row, track, idx, isCur, isSelected) {
+    const previousPath=row.dataset.trackPath,previousTarget=row._coverTarget;
     row.dataset.index = idx;
     row.dataset.trackId = track.id || '';
     row.dataset.trackPath = track.path || '';
@@ -3292,16 +3485,17 @@ class UIController {
 
     // Thumbnail: Instant cache hit or lightweight placeholder with ZERO DOM reallocations
     const targetCover = track.coverPath || track.path;
-    if (targetCover && this.coverCache.has(targetCover) && this.coverCache.get(targetCover) !== 'none') {
-      const dataUrl = this.coverCache.get(targetCover);
+    row._coverTarget=targetCover;
+    if (targetCover && this.libraryCoverCache.has(targetCover) && this.libraryCoverCache.get(targetCover) !== 'none') {
+      const dataUrl = this.libraryCoverCache.get(targetCover);
       if (row._currentCoverSrc !== dataUrl) {
         row._currentCoverSrc = dataUrl;
-        row._thumbImg.src = dataUrl;
-        row._thumbImg.style.display = 'block';
-        row._thumbSvg.style.display = 'none';
+        row._thumbImg.style.display='none';row._thumbSvg.style.display='block';row._thumbImg.src = dataUrl;
       }
     } else {
-      if (row._currentCoverSrc !== 'default') {
+      // Cache eviction must not erase a decoded image already owned by this song.
+      const canKeepImage=(previousPath===track.path||previousTarget===targetCover)&&row._currentCoverSrc&&row._currentCoverSrc!=='default';
+      if (!canKeepImage && row._currentCoverSrc !== 'default') {
         row._currentCoverSrc = 'default';
         row._thumbImg.style.display = 'none';
         row._thumbSvg.style.display = 'block';
@@ -3309,8 +3503,11 @@ class UIController {
     }
 
     // Hardware-accelerated GPU translate3d positioning
-    row.style.transform = `translate3d(0, ${idx * this.ROW_STRIDE}px, 0)`;
-    row.style.display = 'flex';
+    const metrics=this._libraryMetrics||this.getLibraryLayout();
+    const x=metrics.grid?(idx%metrics.columns)*(metrics.cellWidth+16):0,y=Math.floor(idx/metrics.columns)*metrics.stride;
+    row.style.transform=`translate3d(${x}px, ${y}px, 0)`;
+    row.style.width=metrics.grid?metrics.cellWidth+'px':'';row.style.height=metrics.height+'px';
+    row.style.display=metrics.grid?'block':'flex';
   }
 
 
@@ -3385,8 +3582,14 @@ class UIController {
       if (!track) return;
       const sourceView = this.searchQuery ? (this._prevSubViewBeforeSearch || this.currentSubView) : this.currentSubView;
       const scope = sourceView?.startsWith('category:')
-        ? { type: 'category', categoryId: sourceView.slice('category:'.length) } : { type: 'library' };
+        ? { type: 'category', categoryId: sourceView.slice('category:'.length) } : sourceView?.startsWith('folder:')
+        ? {type:'folder',folderPath:this.getLibraryFolder(),includeSubfolders:!!this.libraryIncludeSubfolders} : { type: 'library' };
       this.audioEngine.setQueue(this.filteredTracks, idx, scope);
+      this._searchPlaybackSession = this.searchQuery ? {
+        queue: this.audioEngine.playbackQueue,
+        paths: this.filteredTracks.map(t => t.path),
+        scope
+      } : null;
       this.audioEngine.loadTrack(track, true);
     });
 
@@ -3508,7 +3711,7 @@ class UIController {
     const scrollView = document.getElementById('track-list-scroll-view');if (!scrollView) return;
     const index = this.alphabetFirstIndices?.get(letter);
     if (index === undefined) return;
-    scrollView.scrollTop = index * this.ROW_STRIDE;
+    scrollView.scrollTop = Math.floor(index / this.getLibraryLayout().columns) * this.getLibraryLayout().stride;
     this.resetScrollLerp?.();this.updateVirtualScroll();this.updateOverlayScrollbar();this.highlightAlphabetLetter(letter);
   }
 
@@ -3548,10 +3751,8 @@ class UIController {
       // Immediately synchronize virtual scroll rows and custom overlay scrollbar via rAF
       if (!this._libScrollRaf) {
         this._libScrollRaf = requestAnimationFrame(() => {
-          if (!scrollView.classList.contains('is-fast-scrolling')) {
-            this.updateVirtualScroll();
-            this.updateOverlayScrollbar();
-          }
+          this.updateVirtualScroll();
+          this.updateOverlayScrollbar();
           this._libScrollRaf = null;
         });
       }
@@ -3588,6 +3789,7 @@ class UIController {
       if (absDiff < 0.5) {
         currentScrollTop = targetScrollTop;
         scrollView.scrollTop = currentScrollTop;
+      this.updateVirtualScroll();
         isLerping = false;
         if (isFastScrolling) {
           isFastScrolling = false;
@@ -3603,6 +3805,7 @@ class UIController {
 
       currentScrollTop += diff * 0.28;
       scrollView.scrollTop = currentScrollTop;
+      this.updateVirtualScroll();
 
       if (absDiff > 120) {
         if (!isFastScrolling) {
@@ -3655,6 +3858,7 @@ class UIController {
       if (!isDraggingThumb && absDiff < 0.5) {
         currentScrollTop = targetScrollTop;
         scrollView.scrollTop = currentScrollTop;
+      this.updateVirtualScroll();
         this.updateOverlayScrollbar();
         if (isFastScrolling) {
           isFastScrolling = false;
@@ -3671,6 +3875,7 @@ class UIController {
       // Smooth physical damping
       currentScrollTop += diff * 0.32;
       scrollView.scrollTop = currentScrollTop;
+      this.updateVirtualScroll();
 
       // Update thumb position based on damped currentScrollTop
       const maxScroll = Math.max(0, scrollView.scrollHeight - scrollView.clientHeight);
@@ -3801,6 +4006,7 @@ class UIController {
       }
       targetScrollTop = scrollView.scrollTop;
       currentScrollTop = scrollView.scrollTop;
+      isFastScrolling=false;scrollView.classList.remove('is-fast-scrolling');
     };
   }
 
@@ -3846,7 +4052,8 @@ class UIController {
 
     this.renderTagPillBar();
     this.renderSearchMoreTags();
-    this.applyFilterAndSort();
+    this.renderLibraryFolderBrowser();
+    this.applyFilterAndSort({ preserveScroll: true });
   }
 
   renderTrackList() {
@@ -3866,7 +4073,7 @@ class UIController {
       if (!emptyEl) {
         emptyEl = document.createElement('div');
         emptyEl.className = 'empty-hint';
-        emptyEl.textContent = '暂无匹配歌曲，将音乐放入库文件夹或点击上方添加目录即可自动发现。';
+        emptyEl.textContent = this.getLibraryFolder()?'本层没有匹配歌曲。可进入上方子文件夹，或勾选“含子目录”。':'暂无匹配歌曲，将音乐放入库文件夹或点击上方添加目录即可自动发现。';
         container.appendChild(emptyEl);
       }
       emptyEl.style.display = 'block';
@@ -3877,7 +4084,7 @@ class UIController {
     const emptyEl = container.querySelector('.empty-hint');
     if (emptyEl) emptyEl.style.display = 'none';
 
-    const totalHeight = total * this.ROW_STRIDE;
+    const totalHeight = this.getLibraryLayout().totalHeight;
     spacer.style.height = `${totalHeight}px`;
 
     this.updateVirtualScroll(true);
@@ -3896,8 +4103,13 @@ class UIController {
     const scrollTop = scrollView.scrollTop;
     const clientHeight = scrollView.clientHeight || 600;
 
-    const startIndex = Math.max(0, Math.floor(scrollTop / this.ROW_STRIDE) - this.BUFFER_ITEMS);
-    const endIndex = Math.min(total, Math.ceil((scrollTop + clientHeight) / this.ROW_STRIDE) + this.BUFFER_ITEMS);
+    const metrics=this.getLibraryLayout();this._libraryMetrics=metrics;
+    const spacer=document.getElementById('virtual-scroll-spacer');if(spacer)spacer.style.height=metrics.totalHeight+'px';
+    const range=window.GlassWaveLibraryBrowser?.range(scrollTop,clientHeight,total,metrics);
+    const startIndex=range?.start??Math.max(0,Math.floor(scrollTop/metrics.stride)-this.BUFFER_ITEMS);
+    const endIndex=range?.end??Math.min(total,Math.ceil((scrollTop+clientHeight)/metrics.stride)+this.BUFFER_ITEMS);
+    const layoutKey=metrics.mode+':'+metrics.cellWidth+':'+metrics.columns;
+    if(layoutKey!==this._libraryLayoutKey){force=true;this._libraryLayoutKey=layoutKey;}
 
     if (!force && startIndex === this.visibleStartIndex && endIndex === this.visibleEndIndex) {
       return;
@@ -3907,7 +4119,7 @@ class UIController {
     this.visibleEndIndex = endIndex;
 
     // Highlight active letter on vertical alphabet quick navigation bar
-    const topVisibleIndex = Math.floor(scrollTop / this.ROW_STRIDE);
+    const topVisibleIndex = Math.floor(scrollTop / metrics.stride)*metrics.columns;
     if (this.sortBy === 'title' && this.filteredTracks[topVisibleIndex]) {
       const topLetter = this.getTrackInitialLetter(this.filteredTracks[topVisibleIndex]);
       this.highlightAlphabetLetter(topLetter);
@@ -3923,22 +4135,25 @@ class UIController {
       container.appendChild(newRow);
     }
 
-    // Update active pool rows
-    for (let i = 0; i < neededCount; i++) {
-      const idx = startIndex + i;
-      const track = this.filteredTracks[idx];
-      if (!track) continue;
-      const isCur = curTrack && (curTrack.id === track.id || curTrack.path === track.path);
-      const isSelected = this.selectedTrackPaths.has(track.path);
-      const row = this.rowPool[i];
-
-      this.updatePoolRow(row, track, idx, isCur, isSelected);
+    // Keep the DOM/image for every song that remains in the rendered range.
+    // Index-based recycling would replace every cover when startIndex advances.
+    const desired=new Set(this.filteredTracks.slice(startIndex,endIndex).map(t=>t.path));
+    const retained=new Map(),free=[];
+    for(const row of this.rowPool){
+      const path=row.dataset.trackPath;
+      if(desired.has(path)&&!retained.has(path))retained.set(path,row);
+      else free.push(row);
     }
-
-    // Hide surplus rows in pool
-    for (let i = neededCount; i < this.rowPool.length; i++) {
-      this.rowPool[i].style.display = 'none';
+    const activeRows=[];
+    for(let idx=startIndex;idx<endIndex;idx++){
+      const track=this.filteredTracks[idx];if(!track)continue;
+      const row=retained.get(track.path)||free.shift();
+      const isCur=curTrack&&(curTrack.id===track.id||curTrack.path===track.path);
+      this.updatePoolRow(row,track,idx,isCur,this.selectedTrackPaths.has(track.path));
+      activeRows.push(row);
     }
+    for(const row of free)row.style.display='none';
+    this.rowPool=[...activeRows,...free];
 
     if (!this.isLibraryScrolling) {
       this.scheduleProgressiveCoverLoad();
@@ -3946,93 +4161,40 @@ class UIController {
   }
 
   triggerTrackBrushIn() {
-    if (!this.rowPool) return;
-    this.rowPool.forEach(row => {
-      if (row.style.display !== 'none') {
-        row.classList.remove('brush-in');
-        void row.offsetWidth;
-        row.classList.add('brush-in');
-      }
-    });
-    if (this._brushInTimer) clearTimeout(this._brushInTimer);
-    this._brushInTimer = setTimeout(() => {
-      if (this.rowPool) {
-        this.rowPool.forEach(row => row.classList.remove('brush-in'));
-      }
-      this._brushInTimer = null;
-    }, 380);
+    // Recycled rows stay visible; do not fade song names out during navigation.
+    this.rowPool?.forEach(row=>row.classList.remove('brush-in'));
   }
 
   // Progressive background cover loader: runs during scroll-idle
   scheduleProgressiveCoverLoad() {
-    if (this.isLibraryScrolling) return;
-    if (this.coverLoadQueueTimer) {
-      clearTimeout(this.coverLoadQueueTimer);
-      this.coverLoadQueueTimer = null;
-    }
-    if (!window.glasswaveAPI || !window.glasswaveAPI.getCoverData) return;
-    if (this.visibleStartIndex === -1 || this.visibleEndIndex === -1) return;
-
-    const visibleTracks = this.filteredTracks.slice(this.visibleStartIndex, this.visibleEndIndex);
-    const needed = [];
-    for (const track of visibleTracks) {
-      const targetCover = track.coverPath || track.path;
-      if (targetCover && !this.coverCache.has(targetCover) && !this.pendingCoverRequests.has(targetCover)) {
-        needed.push({ track, targetCover });
-      }
-    }
-
-    if (needed.length === 0) return;
-
-    let index = 0;
-    const processBatch = () => {
-      if (this.isLibraryScrolling) return;
-
-      const batch = needed.slice(index, index + 3);
-      index += 3;
-
-      batch.forEach(({ track, targetCover }) => {
-        this.pendingCoverRequests.add(targetCover);
-        window.glasswaveAPI.getCoverData(targetCover).then(dataUrl => {
-          this.pendingCoverRequests.delete(targetCover);
-          if (dataUrl) {
-            if (this.coverCache.size > 800) {
-              const oldestKey = this.coverCache.keys().next().value;
-              this.coverCache.delete(oldestKey);
-            }
-            this.coverCache.set(targetCover, dataUrl);
-            if (track.path) this.coverCache.set(track.path, dataUrl);
-
-            // Fast pool lookup without querySelector
-            if (!this.isLibraryScrolling) {
-              const poolRow = this.rowPool.find(r => r.dataset.trackPath === track.path && r.style.display !== 'none');
-              if (poolRow) {
-                poolRow._currentCoverSrc = dataUrl;
-                if (poolRow._thumbImg) {
-                  poolRow._thumbImg.src = dataUrl;
-                  poolRow._thumbImg.style.display = 'block';
-                }
-                if (poolRow._thumbSvg) {
-                  poolRow._thumbSvg.style.display = 'none';
-                }
-              }
-            }
-          } else {
-            this.coverCache.set(targetCover, 'none');
-            if (track.path) this.coverCache.set(track.path, 'none');
-          }
-        }).catch(() => {
-          this.pendingCoverRequests.delete(targetCover);
-          this.coverCache.set(targetCover, 'none');
-        });
+    if(this.isLibraryScrolling||this.coverLoadQueueTimer||this.visibleStartIndex<0)return;
+    const api=window.glasswaveAPI,load=api?.getLibraryCoverData||api?.getCoverData;if(!load)return;
+    this.libraryCoverCache ||= new Map();
+    if(this.pendingCoverRequests.size>=3)return;
+    const tracks=this.filteredTracks.slice(this.visibleStartIndex,this.visibleEndIndex).map((track,i)=>({track,index:this.visibleStartIndex+i}));
+    // Prioritize viewport over the overscan buffer.
+    const metrics=this._libraryMetrics||this.getLibraryLayout(),top=document.getElementById('track-list-scroll-view')?.scrollTop||0;
+    const center=Math.floor(top/metrics.stride)*metrics.columns;tracks.sort((a,b)=>Math.abs(a.index-center)-Math.abs(b.index-center));
+    for(const {track} of tracks){
+      if(this.pendingCoverRequests.size>=3)break;
+      const target=track.coverPath||track.path;
+      if(!target||this.libraryCoverCache.has(target)||this.pendingCoverRequests.has(target))continue;
+      this.pendingCoverRequests.add(target);
+      Promise.resolve().then(()=>load(target)).then(data=>{
+        this.libraryCoverCache.set(target,data||'none');
+        while(this.libraryCoverCache.size>Math.max(192,Math.min(512,this.visibleEndIndex-this.visibleStartIndex+32)))this.libraryCoverCache.delete(this.libraryCoverCache.keys().next().value);
+        // A recycled cell must never receive the previous song's cover.
+        if(!this.isLibraryScrolling)for(const row of this.rowPool){
+          if(row.style.display==='none')continue;
+          const idx=Number(row.dataset.index),current=this.filteredTracks[idx];
+          if(current?.path===row.dataset.trackPath&&(current.coverPath||current.path)===target)
+            this.updatePoolRow(row,current,idx,row.classList.contains('playing'),this.selectedTrackPaths.has(current.path));
+        }
+      }).catch(()=>this.libraryCoverCache.set(target,'none')).finally(()=>{
+        this.pendingCoverRequests.delete(target);
+        if(!this.coverLoadQueueTimer)this.coverLoadQueueTimer=setTimeout(()=>{this.coverLoadQueueTimer=null;this.scheduleProgressiveCoverLoad();},35);
       });
-
-      if (index < needed.length && !this.isLibraryScrolling) {
-        this.coverLoadQueueTimer = setTimeout(processBatch, 35);
-      }
-    };
-
-    processBatch();
+    }
   }
 
   loadVisibleCovers(slice) {
@@ -5175,7 +5337,7 @@ class UIController {
     this.removeTracksFromPlayback(res.deletedPaths || [],playing);
     this.setTracks(res.tracks);
     if(detached && !(res.deletedPaths || []).includes(current.path)) {
-      await e.loadTrack(current,playing);e.audio.currentTime=time;
+      await e.loadTrack(current,playing);await e.seek(time);
     }
     if(!res.success) this.showToast('部分文件未删除：'+res.error);
     return res;
@@ -5436,13 +5598,15 @@ class UIController {
         button.setAttribute('aria-pressed', String(active));
       });
     };
+    const previous=this.audioEngine.onReverbChange;
+    this.audioEngine.onReverbChange=(...args)=>{previous?.apply(this.audioEngine,args);refresh();this.syncPrimaryControlStates();};
     for (const preset of api.PRESETS) {
       const button = document.createElement('button');
       button.type = 'button';button.className = 'reverb-icon-btn';
       button.dataset.reverb = preset.id;button.title = preset.name;
       button.setAttribute('aria-label', preset.name);
       button.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${preset.icon}"/></svg>`;
-      button.onclick = () => { this.audioEngine.setReverbPreset(preset.id);refresh(); };
+      button.onclick = () => { this.audioEngine.setReverbPreset(preset.id); };
       grid.appendChild(button);
     }
     refresh();
@@ -5461,7 +5625,7 @@ class UIController {
         const isOpening = !eqModal.classList.contains('open') && eqModal.style.display !== 'flex';
         eqModal.classList.toggle('open', isOpening);
         eqModal.style.display = isOpening ? 'flex' : 'none';
-        btnToggleEQ.classList.toggle('active', isOpening);
+        this.syncPrimaryControlStates();
         if (document.body.classList.contains('zen-mode')) {
           document.body.classList.toggle('zen-interactive-open', isOpening);
           document.body.classList.toggle('zen-show-player-bar', isOpening);
@@ -5473,7 +5637,7 @@ class UIController {
       btnCloseEQ.onclick = () => {
         eqModal.classList.remove('open');
         eqModal.style.display = 'none';
-        if (btnToggleEQ) btnToggleEQ.classList.remove('active');
+        this.syncPrimaryControlStates();
         if (document.body.classList.contains('zen-mode')) {
           const queueDrawer = document.getElementById('glass-queue-drawer');
           const isDrawerOpen = queueDrawer && queueDrawer.classList.contains('open');
@@ -5489,7 +5653,7 @@ class UIController {
       if (e.target.closest('#glass-context-menu, #category-context-menu, .category-icon-picker, #glass-confirm-modal, #glass-confirm-dialog, #modal-rename-eq-preset')) return;
       eqModal.classList.remove('open');
       eqModal.style.display = 'none';
-      if (btnToggleEQ) btnToggleEQ.classList.remove('active');
+      this.syncPrimaryControlStates();
       if (document.body.classList.contains('zen-mode')) {
         const queueDrawer = document.getElementById('glass-queue-drawer');
         const isDrawerOpen = queueDrawer && queueDrawer.classList.contains('open');
@@ -6085,10 +6249,10 @@ class UIController {
     window.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || !this.canDragWindowFromTarget(e.target)) return;
 
-      // Never drag window when maximized or fullscreen
-      if (document.body.classList.contains('window-fullscreen') || document.body.classList.contains('is-maximized')) {
-        return;
-      }
+      // Fullscreen/maximized windows restore only when dragging the top strip.
+      // Playback-stage clicks remain safe; the native process applies the movement threshold.
+      if ((document.body.classList.contains('window-fullscreen') || document.body.classList.contains('is-maximized')) &&
+          !e.target.closest('#titlebar') && !(e.clientY >= 0 && e.clientY <= 48)) return;
 
       // Dismiss floating overlays without changing the current page when a background drag starts.
       if (document.body.classList.contains('zen-mode')) {
@@ -6118,7 +6282,7 @@ class UIController {
       if (window.glasswaveAPI && window.glasswaveAPI.dragStartWindow) {
         window.glasswaveAPI.dragStartWindow({ screenX: e.screenX, screenY: e.screenY });
       }
-    });
+    }, true);
 
     const finishWindowDrag = () => {
       if (isDraggingWindow) {
@@ -6131,8 +6295,8 @@ class UIController {
         }
       }
     };
-    window.addEventListener('pointerup',finishWindowDrag);
-    window.addEventListener('pointercancel',finishWindowDrag);
+    window.addEventListener('pointerup',finishWindowDrag,true);
+    window.addEventListener('pointercancel',finishWindowDrag,true);
     window.addEventListener('blur',finishWindowDrag);
   }
 
@@ -6292,6 +6456,7 @@ class UIController {
     } else if (mode === 'always') {
       btnPin.title = '窗口置顶: 永久置顶 (窗口始终保持最前，点击取消置顶)';
     }
+    this.syncPrimaryControlStates();
   }
 
   syncAlwaysOnTop(forcePlayingState) {
@@ -6682,6 +6847,7 @@ class UIController {
           await window.glasswaveAPI.unhideAllTracks();
           const tracks = await window.glasswaveAPI.getTracks();
           this.coverCache.clear();
+          this.libraryCoverCache.clear();
           this.setTracks(tracks);
           btnRefreshAllMeta.textContent = '内嵌封面已更新';
         } catch (e) {
@@ -6718,7 +6884,7 @@ class UIController {
       const prefix=folder.replace(/[\\/]+$/,'').toLowerCase()+'\\';
       const count=tracks.filter(t=>t.path && t.path.split('/').join('\\').toLowerCase().startsWith(prefix)).length;
       const card = document.createElement('div');
-      card.className = 'setting-item';
+      card.className = 'setting-item music-folder-browse';
       card.style.justifyContent = 'space-between';
       card.style.padding = '18px 24px';
 
@@ -6735,11 +6901,14 @@ class UIController {
           </div>
         </div>
         <div style="display:flex; gap:10px; flex-shrink:0; margin-left:14px;">
+          <button class="glass-pill-btn btn-browse-folder" style="padding:6px 14px;font-size:12px;">浏览歌曲</button>
           <button class="glass-pill-btn btn-remove-folder" style="padding:6px 14px;font-size:12px;">移除监控</button>
           <button class="glass-pill-btn btn-open-folder" data-path="${escapeHtml(folder)}" style="padding:6px 14px; font-size:12px;">在资源管理器中打开</button>
         </div>
       `;
 
+      card.querySelector('.btn-browse-folder').onclick=()=>this.openLibraryFolder(folder);
+      card.addEventListener('click',e=>{if(!e.target.closest('button'))this.openLibraryFolder(folder);});
       card.querySelector('.btn-remove-folder').onclick=async()=>{
         if(!await this.showGlassConfirm({title:'移除监控目录',message:'停止监控这个目录，并移出仅属于此目录的曲目？',subtext:'不会删除本地音乐文件；其他监控目录仍覆盖的曲目会保留。',confirmText:'移除监控'}))return;
         const res=await window.glasswaveAPI.removeMusicFolder(folder);
@@ -7128,6 +7297,9 @@ class UIController {
 
     const savedLumaThreshold = localStorage.getItem('glasswave_bg_luma_threshold');
     const savedWhiteThreshold = localStorage.getItem('glasswave_bg_white_threshold');
+    this.bgEdgeSoftness = window.GlassWaveEdgeSmoothing.normalize(localStorage.getItem('glasswave_bg_edge_softness'));
+    const edgeSlider = document.getElementById('setting-bg-edge-softness');
+    if (edgeSlider) edgeSlider.oninput = e => this.updateWallpaperEdgeSoftness(e.target.value);
     const savedLumaMode = localStorage.getItem('glasswave_bg_luma_mode') || 'cutout';
     const savedKeyColor = localStorage.getItem('glasswave_bg_key_color');
     this.bgLumaColor = ['off', 'black', 'white'].includes(savedKeyColor)
@@ -7544,6 +7716,12 @@ class UIController {
     this.updateWallpaperLumaThreshold(threshold);
   }
 
+  updateWallpaperEdgeSoftness(value) {
+    this.bgEdgeSoftness = window.GlassWaveEdgeSmoothing.normalize(value);
+    try { localStorage.setItem('glasswave_bg_edge_softness', this.bgEdgeSoftness); } catch {}
+    this.updateWallpaperLumaThreshold(this.bgLumaThreshold || 0);
+  }
+
   updateWallpaperLumaThreshold(thresholdPct, mode = undefined) {
     const clamped = Math.max(0, Math.min(80, Math.round(Number(thresholdPct) || 0)));
     if (clamped === 0) this.bgLumaColor = 'off';
@@ -7558,6 +7736,10 @@ class UIController {
     const color = this.bgLumaColor;
     const active = color !== 'off' && clamped > 0;
     const white = color === 'white';
+    this.bgEdgeSoftness = window.GlassWaveEdgeSmoothing.normalize(this.bgEdgeSoftness);
+    const edgeSlider = document.getElementById('setting-bg-edge-softness'), edgeLabel = document.getElementById('lbl-bg-edge-softness');
+    if (edgeSlider) edgeSlider.value = this.bgEdgeSoftness;
+    if (edgeLabel) edgeLabel.textContent = this.bgEdgeSoftness + '%';
     const btnKey = document.getElementById('btn-bg-luma-key');
     const lblKey = document.getElementById('lbl-bg-luma-status');
     const slider = document.getElementById('setting-bg-luma-threshold');
@@ -7594,11 +7776,11 @@ class UIController {
 
     if (active && funcA) {
       const threshold = clamped / 100;
-      const feather = this.bgLumaMode === 'soft' ? 0.10 : 0.035;
-      const slope = Number(((white ? -1 : 1) / feather).toFixed(2));
-      const intercept = Number(((white ? 1 - threshold : -threshold) / feather).toFixed(2));
-      funcA.setAttribute('slope', slope);
-      funcA.setAttribute('intercept', intercept);
+      const edge = window.GlassWaveEdgeSmoothing.parameters(this.bgEdgeSoftness, threshold, color);
+      funcA.setAttribute('slope', edge.slope);
+      funcA.setAttribute('intercept', edge.intercept);
+      document.getElementById('luma-key-feather')?.setAttribute('stdDeviation', edge.blur);
+      document.getElementById('luma-key-edge-curve')?.setAttribute('tableValues', edge.table.join(' '));
     }
 
     try {
@@ -7799,7 +7981,8 @@ class UIController {
     const activePure = document.querySelector('.pure-color-swatch.active');
     if (activePure) activePure.classList.remove('active');
 
-    // Reset background cutout to off and clear both saved thresholds.
+    // Reset background cutout and its combined edge quality control.
+    this.bgEdgeSoftness = window.GlassWaveEdgeSmoothing?.DEFAULT ?? 40;
     this.updateWallpaperLumaThreshold(0, 'cutout');
 
     try {
@@ -7812,6 +7995,7 @@ class UIController {
       localStorage.removeItem('glasswave_bg_white_threshold');
       localStorage.removeItem('glasswave_bg_key_color');
       localStorage.removeItem('glasswave_bg_luma_mode');
+      localStorage.removeItem('glasswave_bg_edge_softness');
     } catch (e) {}
 
     // Permanent small red button: always keep displayed
@@ -8072,6 +8256,15 @@ class UIController {
     bindSlider('vis-reactive-flowSeparation','lbl-vis-reactive-flowSeparation','reactive','flowSeparation',v=>Math.round(v*100)+'%');
     bindSlider('vis-reactive-driftSpeed','lbl-vis-reactive-driftSpeed','reactive','driftSpeed',v=>Math.round(v*100)+'%');
     bindSelect('vis-reactive-driftDirection','reactive','driftDirection');
+    for(const mode of ['wave','reactive','curtain','spectrum','sphere','bars','orb','ambient']){
+      bindSelect('vis-response-'+mode,mode,'responseMode');
+      bindSlider('vis-response-mix-'+mode,'lbl-vis-response-mix-'+mode,mode,'responseMix',v=>Math.round(v*100)+'%');
+    }
+    for(const mode of ['wave','reactive']){
+      bindSlider('vis-'+mode+'-playFlow','lbl-vis-'+mode+'-playFlow',mode,'playFlow',v=>Math.round(v*100)+'%');
+      bindSlider('vis-'+mode+'-flowThreshold','lbl-vis-'+mode+'-flowThreshold',mode,'flowThreshold',v=>(v*100).toFixed(1)+'%');
+      bindSlider('vis-'+mode+'-flowReturnMs','lbl-vis-'+mode+'-flowReturnMs',mode,'flowReturnMs',v=>(v/1000).toFixed(2)+' 秒');
+    }
     bindSlider('vis-wave-curveSmooth','lbl-vis-wave-curveSmooth','wave','curveSmooth',v=>Math.round(v*100)+'%');
     bindSlider('vis-wave-edgeStability','lbl-vis-wave-edgeStability','wave','edgeStability',v=>Math.round(v*100)+'%');
     bindSlider('vis-reactive-curveSmooth','lbl-vis-reactive-curveSmooth','reactive','curveSmooth',v=>Math.round(v*100)+'%');
@@ -8105,8 +8298,7 @@ class UIController {
     if (fpsSelect) {
       fpsSelect.value = String(this.visualizer.tuning?.targetFps || 90);
       fpsSelect.addEventListener('change', (e) => {
-        const val = parseInt(e.target.value, 10);
-        this.visualizer.setTargetFps(val);
+        this.visualizer.setTargetFps(e.target.value);
       });
     }
 
@@ -8114,7 +8306,7 @@ class UIController {
       this._liveFpsInterval = setInterval(() => {
         const badge = document.getElementById('vis-live-fps-badge');
         if (badge && this.visualizer) {
-          const fps = Math.round(this.visualizer.currentFps || 60);
+          const fps = Math.round(Number.isFinite(this.visualizer.currentFps)?this.visualizer.currentFps:0);
           badge.textContent = `实时 ${fps} FPS`;
         }
       }, 400);
@@ -8276,6 +8468,10 @@ class UIController {
   }
 
   syncCurveControlVisibility() {
+    for(const mode of ['wave','reactive','curtain','spectrum','sphere','bars','orb','ambient']){
+      const row=document.getElementById('vis-response-mix-row-'+mode);
+      if(row)row.style.setProperty('display',this.visualizer?.tuning?.[mode]?.responseMode==='hybrid'?'grid':'none','important');
+    }
     for(const mode of ['wave','reactive']){
       const style=mode==='wave'?this.visualizer.tuning.wave.style:this.visualizer.tuning.reactive.layout;
       document.querySelectorAll('#vis-tune-sec-'+mode+' [data-curve-style]').forEach(row=>{
@@ -8337,6 +8533,12 @@ class UIController {
     setSliderVal('vis-reactive-flowSeparation','lbl-vis-reactive-flowSeparation',t.reactive.flowSeparation,v=>Math.round(v*100)+'%');
     setSliderVal('vis-reactive-driftSpeed','lbl-vis-reactive-driftSpeed',t.reactive.driftSpeed,v=>Math.round(v*100)+'%');
     setSelectVal('vis-reactive-driftDirection',t.reactive.driftDirection);
+    for(const mode of ['wave','reactive']){
+      const values=t[mode]||{};
+      setSliderVal('vis-'+mode+'-playFlow','lbl-vis-'+mode+'-playFlow',values.playFlow??1,v=>Math.round(v*100)+'%');
+      setSliderVal('vis-'+mode+'-flowThreshold','lbl-vis-'+mode+'-flowThreshold',values.flowThreshold??.015,v=>(v*100).toFixed(1)+'%');
+      setSliderVal('vis-'+mode+'-flowReturnMs','lbl-vis-'+mode+'-flowReturnMs',values.flowReturnMs??700,v=>(v/1000).toFixed(2)+' 秒');
+    }
     setSliderVal('vis-wave-curveSmooth','lbl-vis-wave-curveSmooth',t.wave.curveSmooth,v=>Math.round(v*100)+'%');
     setSliderVal('vis-wave-edgeStability','lbl-vis-wave-edgeStability',t.wave.edgeStability,v=>Math.round(v*100)+'%');
     setSliderVal('vis-reactive-curveSmooth','lbl-vis-reactive-curveSmooth',t.reactive.curveSmooth,v=>Math.round(v*100)+'%');
@@ -8361,6 +8563,10 @@ class UIController {
     // Quality & Target FPS
     setSelectVal('vis-quality-select', t.quality || 'balanced');
     setSelectVal('vis-target-fps-select', String(t.targetFps || 90));
+    for(const mode of ['wave','reactive','curtain','spectrum','sphere','bars','orb','ambient']){
+      setSelectVal('vis-response-'+mode,t[mode]?.responseMode||'original');
+      setSliderVal('vis-response-mix-'+mode,'lbl-vis-response-mix-'+mode,t[mode]?.responseMix??.5,v=>Math.round(v*100)+'%');
+    }
 
     // Wave
     if (t.wave) {

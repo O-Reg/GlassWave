@@ -272,3 +272,13 @@ test('Zen dock reveal only lifts lyrics and preserves frame dimensions and font 
     classes.delete('zen-show-player-bar');c.updatePlacement();assert.equal(parseFloat(props['--lyric-dock-shift']),0);
   }
 });
+
+test('enlarged artwork cannot force below-cover lyrics into a narrow unreadable strip',()=>{
+ const {window,context}=renderer(),props={},style={setProperty:(k,v)=>props[k]=v,getPropertyValue:k=>props[k]||''};
+ const parent={classList:{remove(){}},getBoundingClientRect:()=>({top:0,bottom:700,height:700,width:1000})};
+ const stage={hidden:false,parentElement:parent,style,clientHeight:220,clientWidth:640,scrollWidth:640,getBoundingClientRect:()=>({height:parseFloat(style.height)||220,width:640})};
+ context.document={body:{classList:{contains:()=>false}},querySelector:()=>null,getElementById:()=>({getBoundingClientRect:()=>({bottom:620})})};
+ context.getComputedStyle=()=>({paddingTop:'12',paddingBottom:'12'});
+ const c=Object.create(window.GlassWaveLyrics.LyricsController.prototype);c.stage=stage;c.content={scrollHeight:140};c.document={timed:true};c.settings={width:64,height:32,size:36,position:'below'};c.updatePlacement();
+ assert.ok(parseFloat(style.height)>200);assert.equal(props['--lyric-effective-size'],'36px');
+});

@@ -118,7 +118,7 @@ html.window-animation-paused *, html.window-animation-paused *::before, html.win
 /* Round only floating windows; this stylesheet loads after controls.css. */
 body:not(.window-fullscreen):not(.is-maximized) #app-shell { border-radius:14px!important; overflow:hidden!important; }
 
-/* The transparent rounded edge is drawn once by the native window shape. */
+/* The compositor draws the transparent edge; the native shape is a padded hit region. */
 body #app-shell, body.window-glass-active #app-shell { border:0!important; outline:0!important; box-shadow:none!important; }
 
 /* Final theme override: fullscreen skins must not reintroduce corner clipping. */
@@ -129,3 +129,130 @@ body:is(.window-fullscreen,.is-maximized) #app-shell > :is(.glass-titlebar,.glas
 body:is(.window-fullscreen,.is-maximized) #app-shell .glass-sidebar {
  border-radius:0!important;
 }
+
+/* Subpixel feathering only in the four corners; straight edges and content stay crisp. */
+body:not(.window-fullscreen):not(.is-maximized) #app-shell {
+  mask-image:
+    radial-gradient(circle at 100% 100%, #000 13.25px, transparent 14px),
+    radial-gradient(circle at 0 100%, #000 13.25px, transparent 14px),
+    radial-gradient(circle at 0 0, #000 13.25px, transparent 14px),
+    radial-gradient(circle at 100% 0, #000 13.25px, transparent 14px),
+    linear-gradient(#000, #000), linear-gradient(#000, #000);
+  mask-size: 14px 14px, 14px 14px, 14px 14px, 14px 14px, calc(100% - 28px) 100%, 100% calc(100% - 28px);
+  mask-position: left top, right top, right bottom, left bottom, center, center;
+  mask-repeat: no-repeat;
+}
+body:is(.window-fullscreen,.is-maximized) #app-shell { mask-image: none !important; }
+
+/* Core display settings only affect the large player artwork and metadata. */
+body #album-wrap { width: min(calc(var(--display-cover-base, 280px) * var(--display-cover-ratio, 1)), calc(100vw - 64px), var(--display-cover-limit, max(48px, calc(100vh - 220px)))) !important; height: auto !important; min-height: 0; max-width: calc(100% - 32px); flex-shrink: 0; aspect-ratio: 1; }
+.display-size-control { display:grid; grid-template-columns:minmax(0,1fr) 58px; gap:6px 12px; align-items:center; font-size:13px; }
+.display-size-control output { width:58px; text-align:right; font-size:12px; font-variant-numeric:tabular-nums; }
+.display-size-control .glass-slider { grid-column:1 / -1; width:100%; min-width:0; margin:0; }
+#display-reset { align-self:flex-start; }
+
+/* The filled play/pause key has its own surface. Do not inherit panel text ink. */
+body #btn-play-pause,
+body .hud-btn.hud-play {
+  color: #0c0e17 !important;
+}
+body.ui-custom-colors #btn-play-pause,
+body.ui-custom-colors .hud-btn.hud-play {
+  background: var(--ui-accent) !important;
+  color: var(--ui-accent-ink) !important;
+}
+body #btn-play-pause svg,
+body #btn-play-pause svg * {
+  color: inherit !important;
+}
+
+/* Primary controls: a state is a filled shape + persistent marker, not only a tint.
+   Explicit IDs out-rank generic theme and compact-mode hover overrides. */
+body {
+  --control-fg:var(--text-muted,#adb9ca);
+  --control-on-bg:#8ac4ff;
+  --control-on-fg:#172033;
+  --control-focus:var(--text-main,#f8fafc);
+}
+body.ui-custom-colors {
+  --control-fg:var(--ui-playerbar-ink);
+  --control-on-bg:var(--ui-accent);
+  --control-on-fg:var(--ui-accent-ink);
+  --control-focus:var(--ui-playerbar-ink);
+}
+body #app-shell :is(#btn-shuffle,#btn-repeat,#btn-prev,#btn-next,#btn-volume-icon,#btn-queue-toggle,#btn-toggle-eq,#btn-toggle-lyrics,#btn-pin-mode,#btn-zen-mode,#btn-mini-mode,#btn-maximize) {
+  position:relative;
+  color:var(--control-fg)!important;
+  background:transparent!important;
+  filter:none!important;
+  opacity:1!important;
+  box-shadow:none;
+}
+body #app-shell :is(#btn-shuffle,#btn-repeat,#btn-prev,#btn-next,#btn-volume-icon,#btn-queue-toggle,#btn-toggle-eq,#btn-toggle-lyrics,#btn-pin-mode,#btn-zen-mode,#btn-mini-mode,#btn-maximize):hover:not(.active) {
+  background:rgba(128,128,128,.14)!important;
+}
+body #app-shell :is(#btn-shuffle,#btn-repeat,#btn-prev,#btn-next,#btn-volume-icon,#btn-queue-toggle,#btn-toggle-eq,#btn-toggle-lyrics,#btn-pin-mode,#btn-zen-mode,#btn-mini-mode,#btn-maximize).active {
+  color:var(--control-on-fg)!important;
+  background:var(--control-on-bg)!important;
+  box-shadow:inset 0 0 0 1px var(--control-on-fg),0 0 8px rgba(138,196,255,.22)!important;
+}
+body #app-shell :is(#btn-shuffle,#btn-repeat,#btn-prev,#btn-next,#btn-volume-icon,#btn-queue-toggle,#btn-toggle-eq,#btn-toggle-lyrics,#btn-pin-mode,#btn-zen-mode,#btn-mini-mode,#btn-maximize).active::after {
+  content:'';position:absolute;right:2px;bottom:2px;width:4px;height:4px;
+  border-radius:50%;background:currentColor;pointer-events:none;
+}
+body:not(.ui-custom-colors) #app-shell #btn-pin-mode.mode-always.active {
+  background:#fbbf24!important;color:#172033!important;
+}
+body #app-shell :is(#btn-shuffle,#btn-repeat,#btn-prev,#btn-next,#btn-volume-icon,#btn-queue-toggle,#btn-toggle-eq,#btn-toggle-lyrics,#btn-pin-mode,#btn-zen-mode,#btn-mini-mode,#btn-maximize):focus-visible {
+  outline:2px dashed var(--control-focus);outline-offset:3px;
+}
+body #app-shell :is(#btn-shuffle,#btn-repeat,#btn-prev,#btn-next,#btn-volume-icon,#btn-queue-toggle,#btn-toggle-eq,#btn-toggle-lyrics,#btn-pin-mode,#btn-zen-mode,#btn-mini-mode,#btn-maximize):disabled {opacity:.4!important;cursor:default;}
+
+/* Independent top/bottom panel colors must use their own inactive icon contrast. */
+body.ui-custom-colors .glass-titlebar {
+  --control-fg:var(--ui-topbar-ink);--control-focus:var(--ui-topbar-ink);
+}
+body.ui-custom-colors .glass-player-bar {
+  --control-fg:var(--ui-playerbar-ink);--control-focus:var(--ui-playerbar-ink);
+}
+
+/* Transport: glow follows the SVG alpha, never a circular button surface. */
+body { --transport-on:var(--accent-primary,#8ac4ff);--transport-stroke:2;--transport-glow:drop-shadow(0 0 2px currentColor) drop-shadow(0 0 5px currentColor); }
+body.ui-custom-colors { --transport-on:var(--ui-control-glow); }
+body[data-button-style="fine"] { --transport-stroke:1.4;--transport-glow:drop-shadow(0 0 2px currentColor); }
+body[data-button-style="bold"] { --transport-stroke:2.8;--transport-glow:drop-shadow(0 0 2px currentColor); }
+body[data-button-style="soft"] { --transport-stroke:2;--transport-glow:drop-shadow(0 0 3px currentColor) drop-shadow(0 0 7px currentColor); }
+body #app-shell :is(#btn-shuffle,#btn-repeat,#btn-prev,#btn-next),
+body #app-shell :is(#btn-shuffle,#btn-repeat,#btn-prev,#btn-next).active,
+body #app-shell :is(#btn-shuffle,#btn-repeat,#btn-prev,#btn-next):hover {
+  background:transparent!important;box-shadow:none!important;border-color:transparent!important;
+  filter:none!important;outline-offset:3px;
+}
+body #app-shell :is(#btn-shuffle,#btn-repeat,#btn-prev,#btn-next).active,
+body #app-shell :is(#btn-shuffle,#btn-repeat,#btn-prev,#btn-next):hover { color:var(--transport-on)!important; }
+body #app-shell :is(#btn-shuffle,#btn-repeat,#btn-prev,#btn-next)::after { display:none!important; }
+body #app-shell :is(#btn-shuffle,#btn-repeat,#btn-prev,#btn-next) svg { stroke-width:var(--transport-stroke);filter:none;transition:filter 120ms ease; }
+body #app-shell :is(#btn-shuffle,#btn-repeat,#btn-prev,#btn-next):is(.active,:hover) svg { filter:var(--transport-glow)!important; }
+body #app-shell #btn-play-pause { box-shadow:none!important; }
+body #app-shell #btn-play-pause svg { filter:drop-shadow(0 0 1px currentColor); }
+body[data-button-style="soft"] #app-shell #btn-play-pause { box-shadow:0 0 9px rgba(var(--ui-accent-rgb,138,196,255),.24)!important; }
+body .reverb-icon-btn.active:not([data-reverb="off"]) svg { filter:var(--transport-glow); }
+body .reverb-icon-btn[data-reverb="off"].active { box-shadow:none; }
+
+/* Effective DSP and panel visibility are independent. Cyan glyph = EQ;
+   violet ring = reverb. Both layers can be visible without masking each other. */
+body #app-shell #btn-toggle-eq[data-eq-effect][data-reverb-effect] {
+  background:transparent!important;box-shadow:none!important;color:var(--control-fg)!important;
+  filter:none!important;isolation:isolate;
+}
+body #app-shell #btn-toggle-eq[data-eq-effect][data-reverb-effect]::after { display:none!important; }
+body #app-shell #btn-toggle-eq[data-eq-effect][data-reverb-effect] svg { filter:none!important;position:relative;z-index:1; }
+body #app-shell #btn-toggle-eq[data-eq-effect="on"][data-reverb-effect] { color:var(--ui-eq-indicator,#67e8f9)!important; }
+body #app-shell #btn-toggle-eq[data-eq-effect="on"][data-reverb-effect] svg { filter:var(--transport-glow)!important; }
+body #app-shell #btn-toggle-eq[data-eq-effect][data-reverb-effect]::before {
+  content:'';position:absolute;inset:2px;border-radius:50%;pointer-events:none;
+  opacity:0;box-sizing:border-box;border:1.5px solid var(--ui-reverb-indicator,#c084fc);
+  background:color-mix(in srgb,var(--ui-reverb-indicator,#c084fc) 16%,transparent);
+  box-shadow:0 0 6px color-mix(in srgb,var(--ui-reverb-indicator,#c084fc) 45%,transparent);
+}
+body #app-shell #btn-toggle-eq[data-eq-effect][data-reverb-effect="on"]::before { opacity:1; }

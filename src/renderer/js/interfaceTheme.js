@@ -4,12 +4,17 @@
   const valid=s=>/^#[0-9a-f]{6}$/i.test(s||'');
   const rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
   const ink=h=>{const v=rgb(h).map(c=>{c/=255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;});return (.2126*v[0]+.7152*v[1]+.0722*v[2])>.179?'#172033':'#f8fafc';};
-  const base={enabled:false,preset:'dark',...presets.dark,separate:false,sidebar:'#121622',topbar:'#121622',playerbar:'#121622',profiles:[]};
+  const buttonStyles={neon:'荧光线条（默认）',fine:'轻盈细线',bold:'清晰粗线',soft:'柔光霓虹'};
+  const luminance=h=>rgb(h).map(c=>{c/=255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;}).reduce((v,c,i)=>v+c*[.2126,.7152,.0722][i],0);
+  const contrast=(a,b)=>{const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
+  const base={buttonStyle:'neon',enabled:false,preset:'dark',...presets.dark,separate:false,sidebar:'#121622',topbar:'#121622',playerbar:'#121622',profiles:[]};
   let state={...base},section,scheduled=0;
   try{state={...base,...JSON.parse(localStorage.getItem(KEY)||'{}')};}catch{}
   for(const k of ['background','panel','accent','selection','sidebar','topbar','playerbar'])if(!valid(state[k]))state[k]=base[k];
   if(!Array.isArray(state.profiles))state.profiles=[];
   function apply(){
+    if(!Object.hasOwn(buttonStyles,state.buttonStyle))state.buttonStyle='neon';
+    document.body.dataset.buttonStyle=state.buttonStyle;
     document.body.classList.toggle('ui-custom-colors',!!state.enabled);
     document.body.classList.toggle('ui-light-glass',!!state.enabled&&state.preset==='light');
     const style=document.body.style,set=(k,v)=>style.setProperty('--ui-'+k,v);
@@ -17,6 +22,10 @@
       const color=['sidebar','topbar','playerbar'].includes(k)&&!state.separate?state.panel:state[k];
       set(k,color);set(k+'-rgb',rgb(color).join(','));set(k+'-ink',ink(color));
     }
+    const surface=state.separate?state.playerbar:state.panel;
+    set('control-glow',contrast(state.accent,surface)>=3?state.accent:ink(surface));
+    set('eq-indicator',ink(surface)==='#172033'?'#0369a1':'#67e8f9');
+    set('reverb-indicator',ink(surface)==='#172033'?'#9333ea':'#c084fc');
     set('muted',ink(state.panel)==='#172033'?'#526176':'#adb9ca');
     set('track',ink(state.panel)==='#172033'?'#8997a8':'#607087');
     set('border',ink(state.panel)==='#172033'?'rgba(20,35,55,.25)':'rgba(235,245,255,.24)');
@@ -30,7 +39,7 @@
     }
     localStorage.setItem(KEY,JSON.stringify(state));
   }
-  function refresh(){if(!section)return;section.querySelector('#ui-colors-enabled').checked=state.enabled;section.querySelector('#ui-color-preset').value=presets[state.preset]?state.preset:'custom';section.querySelector('#ui-colors-separate').checked=state.separate;section.querySelector('#ui-color-individual').hidden=!state.separate;
+  function refresh(){if(!section)return;section.querySelector('#ui-button-style').value=state.buttonStyle;section.querySelector('#ui-colors-enabled').checked=state.enabled;section.querySelector('#ui-color-preset').value=presets[state.preset]?state.preset:'custom';section.querySelector('#ui-colors-separate').checked=state.separate;section.querySelector('#ui-color-individual').hidden=!state.separate;
     for(const el of section.querySelectorAll('[data-color]'))el.value=state[el.dataset.color];
     const list=section.querySelector('#ui-saved-themes');list.replaceChildren(new Option('选择已保存配色',''));
     state.profiles.forEach((p,i)=>list.add(new Option(p.name,String(i))));
@@ -41,9 +50,12 @@
   function init(){
     const panel=document.getElementById('settings-panel-main');if(!panel||document.getElementById('interface-color-settings'))return;
     section=document.createElement('section');section.id='interface-color-settings';section.className='setting-item';
-    section.innerHTML='<div class="setting-title">界面配色</div><div class="setting-desc">文字与图标自动适配深浅；配色和通透度分别控制。图片、封面及波形使用各自的颜色设置。</div><label><input id="ui-colors-enabled" type="checkbox"> 启用自定义配色</label><label class="ui-theme-row">配色预设<select id="ui-color-preset" class="glass-select"></select></label><div id="ui-color-fields"></div><details><summary>分别设置面板</summary><label><input id="ui-colors-separate" type="checkbox"> 使用各栏独立颜色</label><div id="ui-color-individual"></div></details><div class="ui-theme-save"><input id="ui-theme-name" placeholder="我的配色名称" maxlength="24"><button id="ui-theme-save" class="glass-pill-btn">保存配色</button></div><div class="ui-theme-save"><select id="ui-saved-themes" class="glass-select"></select><button id="ui-theme-load" class="glass-pill-btn">应用</button><button id="ui-theme-delete" class="glass-pill-btn">删除</button></div><button id="ui-theme-reset" class="glass-pill-btn">恢复深色默认</button><div id="ui-theme-status" role="status"></div>';
+    section.innerHTML='<div class="setting-title">界面配色</div><div class="setting-desc">文字与图标自动适配深浅；强调色同时控制播放键，按钮图标自动反色。配色和通透度分别控制。图片、封面及波形使用各自的颜色设置。</div><label class="ui-theme-row">按键风格<select id="ui-button-style" class="glass-select" aria-label="播放控制按键风格"></select></label><div class="setting-desc">图标本身发光；随机、循环开启时持续点亮。按键配色沿用下方的强调色。</div><label><input id="ui-colors-enabled" type="checkbox"> 启用自定义配色</label><label class="ui-theme-row">配色预设<select id="ui-color-preset" class="glass-select"></select></label><div id="ui-color-fields"></div><details><summary>分别设置面板</summary><label><input id="ui-colors-separate" type="checkbox"> 使用各栏独立颜色</label><div id="ui-color-individual"></div></details><div class="ui-theme-save"><input id="ui-theme-name" placeholder="我的配色名称" maxlength="24"><button id="ui-theme-save" class="glass-pill-btn">保存配色</button></div><div class="ui-theme-save"><select id="ui-saved-themes" class="glass-select"></select><button id="ui-theme-load" class="glass-pill-btn">应用</button><button id="ui-theme-delete" class="glass-pill-btn">删除</button></div><button id="ui-theme-reset" class="glass-pill-btn">恢复深色默认</button><div id="ui-theme-status" role="status"></div>';
+    const stylePicker=section.querySelector('#ui-button-style');
+    for(const [id,label] of Object.entries(buttonStyles))stylePicker.add(new Option(label,id));
+    stylePicker.onchange=()=>{state.buttonStyle=stylePicker.value;apply();refresh();};
     const ps=section.querySelector('#ui-color-preset');for(const [key,p] of Object.entries(presets))ps.add(new Option(p.name,key));ps.add(new Option('自定义','custom'));
-    for(const [key,label] of [['background','背景色'],['panel','统一面板色'],['accent','强调 / 进度色'],['selection','歌曲选中色'],['sidebar','侧栏色'],['topbar','顶部栏色'],['playerbar','播放栏色']]){
+    for(const [key,label] of [['background','背景色'],['panel','统一面板色'],['accent','强调 / 进度 / 播放键色'],['selection','歌曲选中色'],['sidebar','侧栏色'],['topbar','顶部栏色'],['playerbar','播放栏色']]){
       const row=document.createElement('div');row.className='ui-theme-row';const title=document.createElement('label');title.textContent=label;title.htmlFor='ui-color-'+key;row.append(title);
       const picker=document.createElement('input');picker.type='color';picker.id='ui-color-'+key;picker.dataset.color=key;picker.setAttribute('aria-label',label);row.append(picker);
       const text=document.createElement('input');text.type='text';text.dataset.color=key;text.maxLength=7;text.setAttribute('aria-label',label+'色值');row.append(text);

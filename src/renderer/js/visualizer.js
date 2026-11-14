@@ -145,14 +145,14 @@ class Visualizer {
 
     // Advanced Visual Tuning Parameters
     this.defaultTuning = {
-      reactive: { layout: 'ribbon', edgeStability: .85, curveSmooth: .2, separation: .55, flowSeparation: 0, driftSpeed: 1, driftDirection: 'right', idleMotion: .18, density: 8, response: .95, gain: 2.5, detail: .8, divergence: .45, strength: 1.2, smoothing: .35, lineWidth: 3, musicMix: .85, glow: .8, spread: .7 },
+      reactive: { playFlow: 1, flowThreshold: .015, flowReturnMs: 700, layout: 'ribbon', edgeStability: .85, curveSmooth: .2, separation: .55, flowSeparation: 0, driftSpeed: 1, driftDirection: 'right', idleMotion: .18, density: 8, response: .95, gain: 2.5, detail: .8, divergence: .45, strength: 1.2, smoothing: .35, lineWidth: 3, musicMix: .85, glow: .8, spread: .7 },
       curtain: { strength: 1.5, width: .32, speed: 1 },
       palette: 'solid',
       solidColor: '#ffffff',
       modeColors: Object.fromEntries(['wave','spectrum','sphere','bars','orb','ambient','reactive','curtain'].map(mode => [mode, { palette: 'original', solidColor: mode === 'orb' ? '#fbbf24' : '#ffffff' }])),
       hueShift: 0,
       quality: 'balanced', // 'low' | 'balanced' | 'high' | 'ultra'
-      targetFps: 90, // Menu offers 60 or 90; legacy "unlimited" uses the 90 FPS clock.
+      targetFps: 90, // Explicit high-refresh rates or "native"; retain the existing default.
       audioResponse: {
         smoothFactor: 0.70, // 0% ~ 95%
         attackMs: 35,       // 0 ~ 300ms
@@ -165,6 +165,7 @@ class Visualizer {
         peakSoftening: 'soft' // 'off' | 'soft' | 'medium' | 'heavy'
       },
       wave: {
+        playFlow: 1, flowThreshold: .015, flowReturnMs: 700,
         style: 'ribbon', edgeStability: .8, curveSmooth: .6, separation: 1.2, flowSeparation: .5, driftSpeed: 1, driftDirection: 'right', idleMotion: .18, density: 8, response: .6, gain: 2.5, detail: .8, divergence: .45, musicMix: .85,
         lineWidth: 8,
         amplitude: 1.8,
@@ -255,6 +256,9 @@ class Visualizer {
       }
     };
 
+    for(const mode of ['wave','reactive','curtain','spectrum','sphere','bars','orb','ambient']){
+      this.defaultTuning[mode].responseMode='original';this.defaultTuning[mode].responseMix=.5;
+    }
     this.tuning = JSON.parse(JSON.stringify(this.defaultTuning));
     this.loadTuning();
     if (this.tuning.wave.lineCount < 3 || this.tuning.wave.lineCount > 5) this.tuning.wave.lineCount = 4;
@@ -380,13 +384,18 @@ class Visualizer {
     const name = modeColor?.palette || 'original';
     if (name === 'original') return;
     const palettes = { aurora: ['#38bdf8','#a78bfa','#f472b6'], ocean: ['#22d3ee','#3b82f6','#6366f1'], sunset: ['#fbbf24','#fb7185','#c084fc'], forest: ['#a3e635','#34d399','#2dd4bf'] };
-    ctx.save(); ctx.globalCompositeOperation = 'source-in';
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-in';
     if (name === 'solid') ctx.fillStyle = modeColor.solidColor || '#38bdf8';
     else {
       const colors = palettes[name] || palettes.aurora;
-      const gradient = ctx.createLinearGradient(0,0,this.width,0);
-      colors.forEach((color,index) => gradient.addColorStop(index/(colors.length-1),color));
-      ctx.fillStyle = gradient;
+      const key=name+':'+this.width;
+      if(this._paletteCache?.key!==key || this._paletteCache.ctx!==ctx){
+        const gradient=ctx.createLinearGradient(0,0,this.width,0);
+        colors.forEach((color,index)=>gradient.addColorStop(index/(colors.length-1),color));
+        this._paletteCache={key,ctx,gradient};
+      }
+      ctx.fillStyle=this._paletteCache.gradient;
     }
     ctx.fillRect(0,0,this.width,this.height); ctx.restore();
   }
@@ -415,6 +424,7 @@ class Visualizer {
   getAnchorPoint() {
     const w = this.width;
     const h = this.height;
+    if(this.positionPreset==='center')return {cx:w*.5,cy:h*.5+this.offsetY};
     const cover = this.getCoverMetrics();
 
     let cx = cover.cx;
@@ -464,31 +474,15 @@ class Visualizer {
 
   startLoop() {
     window.glasswaveFrameClock?.setRate(this.tuning?.targetFps);
-    let lastRenderTime = performance.now();
     let frameCount = 0;
     let fpsTimer = performance.now();
-
     const loop = (currentTime) => {
-      const targetFps = this.tuning?.targetFps || 'unlimited';
-      let minDelta = 0;
-      if (targetFps === 60) minDelta = 1000 / 60;
-      else if (targetFps === 90) minDelta = 1000 / 90;
-      else if (targetFps === 120) minDelta = 1000 / 120;
-      else if (targetFps === 144) minDelta = 1000 / 144;
-
-      const delta = currentTime - lastRenderTime;
-      if (minDelta <= 0 || delta + 0.5 >= minDelta) {
-        lastRenderTime = minDelta > 0
-          ? lastRenderTime + Math.max(1, Math.floor((delta + 0.5) / minDelta)) * minDelta
-          : currentTime;
-        this.render();
-
-        frameCount++;
-        if (currentTime - fpsTimer >= 350) {
-          this.currentFps = Math.round((frameCount * 1000) / (currentTime - fpsTimer));
-          frameCount = 0;
-          fpsTimer = currentTime;
-        }
+      this.render();
+      frameCount++;
+      if (currentTime - fpsTimer >= 350) {
+        this.currentFps = Math.round((frameCount * 1000) / (currentTime - fpsTimer));
+        frameCount = 0;
+        fpsTimer = currentTime;
       }
       requestAnimationFrame(loop);
     };
@@ -566,8 +560,16 @@ class Visualizer {
         }
       }
     } catch (e) {}
+    // One-time return to continuously flowing ribbons, without deleting the optional controls.
+    try{
+      if(!localStorage.getItem('glasswave_response_flow_v1')){
+        for(const mode of ['wave','reactive'])if(this.tuning[mode])this.tuning[mode].playFlow=1;
+        this.saveTuning();localStorage.setItem('glasswave_response_flow_v1','1');
+      }
+    }catch{}
     // Earlier builds stored the 90 FPS clock rate as "unlimited".
-    if (this.tuning.targetFps === 'unlimited') this.tuning.targetFps = 90;
+    this.tuning.targetFps=this.normalizeTargetFps(this.tuning.targetFps);
+    window.glasswaveFrameClock?.setRate(this.tuning.targetFps);
   }
 
   saveTuning() {
@@ -595,10 +597,16 @@ class Visualizer {
     this.saveTuning();
   }
 
+  normalizeTargetFps(fps) {
+    if(fps==='native')return 'native';
+    const n=Number(fps);
+    return [60,90,120,144,180].includes(n)?n:90;
+  }
+
   setTargetFps(fps) {
     if (!this.tuning) this.tuning = {};
-    this.tuning.targetFps = fps;
-    window.glasswaveFrameClock?.setRate(fps);
+    this.tuning.targetFps = this.normalizeTargetFps(fps);
+    window.glasswaveFrameClock?.setRate(this.tuning.targetFps);
     this.saveTuning();
   }
 
@@ -614,6 +622,7 @@ class Visualizer {
 
   resetAllVisualTuning() {
     this.tuning = JSON.parse(JSON.stringify(this.defaultTuning));
+    window.glasswaveFrameClock?.setRate(this.tuning.targetFps);
     this.saveTuning();
     this.performSyncResize();
   }
@@ -652,9 +661,12 @@ class Visualizer {
     const len = ap.processedFreqs.length;
 
     if (raw && rawLen > 0) {
-      const isLog = cfg.distribution !== 'linear';
+      const isLog = !audioData?.spatialBands && cfg.distribution !== 'linear';
       const minBin = 1;
-      const maxBin = Math.floor(rawLen * 0.72);
+      const maxBin = audioData?.spatialBands ? rawLen-1 : Math.floor(rawLen * 0.72);
+      if(ap.prefix?.length!==rawLen+1)ap.prefix=new Float64Array(rawLen+1);
+      ap.prefix[0]=0;
+      for(let i=0;i<rawLen;i++)ap.prefix[i+1]=ap.prefix[i]+raw[i];
 
       for (let i = 0; i < len; i++) {
         const norm = i / (len - 1);
@@ -670,10 +682,8 @@ class Visualizer {
         let sum = 0, count = 0;
         const bStart = Math.max(0, centerBin - win);
         const bEnd = Math.min(rawLen - 1, centerBin + win);
-        for (let k = bStart; k <= bEnd; k++) {
-          sum += raw[k];
-          count++;
-        }
+        sum = ap.prefix[bEnd+1]-ap.prefix[bStart];
+        count = bEnd-bStart+1;
         let energy = ((sum / count) / 255) * this.intensity;
 
         // Visual frequency band weighting
@@ -783,10 +793,16 @@ class Visualizer {
     this._waveFrameScale = this._lastWaveTime == null ? 1 : Math.min(3, Math.max(0, (now - this._lastWaveTime) / (1000 / 60)));
     this._lastWaveTime = now;
     const ctx = this.ctx;
-    ctx.clearRect(0, 0, this.width, this.height);
+    this._ribbonGpuPainted=false;
+    // A full clear lets Skia discard obsolete draw commands and avoids retained edge pixels.
+    ctx.clearRect(0,0,this.width,this.height);
 
-    const audioData = this.audioEngine ? this.audioEngine.getAudioData() : null;
+    const sourceAudio = this.audioEngine ? this.audioEngine.getAudioData() : null;
     const isPlaying = this.audioEngine ? this.audioEngine.isPlaying : false;
+    const response=this.tuning?.[this.mode];
+    const audioData=window.GlassWaveVisualResponse && response?.responseMode && response.responseMode!=='original'
+      ? (this._responseSampler ||= new window.GlassWaveVisualResponse()).sample(sourceAudio,response,isPlaying,this.audioEngine?.audioContext?.sampleRate)
+      : sourceAudio;
 
     // Run unified audio preprocessor
     this.processAudioResponse(audioData, isPlaying);
@@ -840,7 +856,8 @@ class Visualizer {
         this.drawLiquidWave(ctx, audioData, isPlaying);
         break;
     }
-    this.applyPalette(ctx);
+    if(!this._ribbonGpuPainted)this.applyPalette(ctx);
+    return true;
   }
 
   // Broad, separated curves: no perspective mesh or sub-pixel distant lines.
@@ -855,74 +872,128 @@ class Visualizer {
     const gain=2.5; // Overall amplitude is the single strength control.
     const detail=1-Math.max(0,Math.min(1,t.curveSmooth??(1-(t.detail??.8))));
     const edgeStability=Math.max(0,Math.min(1,t.edgeStability??.85));
-    const divergence=0;
-    const mix=0; // One detail filter, shared by all traces.
     const follow=1-Math.exp(-(dt*1000/60)/(12+Math.pow(1-(t.response??.85),2)*250));
     const amplitude=Math.min(h*.46,h*.18*(t.amplitude??t.strength??1)*this.intensity);
     const separation=Math.max(0,Math.min(2,t.separation??.55));
     const idleMotion=Math.max(0,Math.min(2,t.idleMotion??.18));
     const flowSeparation=Math.max(0,Math.min(2,t.flowSeparation??0));
     const driftSpeed=Math.max(0,Math.min(4,t.driftSpeed??1));
+    // Audio displacement never inherits the idle drift. Let the hidden flow phase
+    // continue, but crossfade its contribution out while real PCM is active.
+    const frameMs=dt*1000/60,threshold=Math.max(.001,Math.min(.12,t.flowThreshold??.015));
+    let squareSum=0;
+    if(raw?.length)for(let i=0;i<raw.length;i++){const value=raw[i]-128;squareSum+=value*value;}
+    const level=raw?.length?Math.sqrt(squareSum/raw.length)/128:0;
+    state.audioActive=!!raw && (level>threshold || (state.audioActive&&level>threshold*.65));
+    state.flowHoldMs=state.audioActive?120:Math.max(0,(state.flowHoldMs||0)-frameMs);
+    const active=!!raw&&(state.audioActive||state.flowHoldMs>0);
+    const recovery=Math.max(0,Math.min(2500,t.flowReturnMs??700));
+    state.motionActivity=Math.max(0,Math.min(1,(state.motionActivity||0)+(active?frameMs/45:-(recovery>0?frameMs/recovery:1))));
+    const retained=Math.max(0,Math.min(1,t.playFlow??1));
+    const flowWeight=1-state.motionActivity*(1-retained);
+    state.flowWeight=flowWeight;
     const direction=t.driftDirection??'right';
     state.drift=(state.drift||0)+dt*.018*driftSpeed*(direction==='left'?-1:direction==='right'?1:0);
     state.breath=(state.breath||0)+dt*.015*driftSpeed;
     const breath=.72+.28*Math.sin(state.breath);
     const glow=key==='wave'?Math.min(3,(t.glowBlur??18)/25):Math.min(3,t.glow??.8);
     const lineWidth=t.lineWidth??3,cy=Math.max(h*.33,Math.min(h*.67,this.getAnchorPoint().cy));
-    const gradients=[['#4777ac','#8060c1','#684184'],['#c8e5f1','#dae6ff','#b6c6e5'],['#40a9de','#ab85fb','#c45395']].map(colors=>{
-      const g=ctx.createLinearGradient(0,0,w,0);colors.forEach((c,i)=>g.addColorStop(i/2,c));return g;
-    });
+    if(!state.gradients || state.gradientWidth!==w || state.gradientContext!==ctx){
+      state.gradients=[['#4777ac','#8060c1','#684184'],['#c8e5f1','#dae6ff','#b6c6e5'],['#40a9de','#ab85fb','#c45395']].map(colors=>{
+        const g=ctx.createLinearGradient(0,0,w,0);colors.forEach((c,i)=>g.addColorStop(i/2,c));return g;
+      });
+      state.gradientWidth=w;state.gradientContext=ctx;
+    }
+    const gradients=state.gradients;
+    const targets=state.targets ||= new Float64Array(points);
+    const flow=state.flow ||= new Float64Array(points);
+    const weights=state.weights ||= new Float64Array(points);
+    const radius=Math.round((1-detail)*24),length=(raw?.length||1)-1;
+    const fillTargets=(samples,output,slot)=>{
+      const prefixes=state.targetPrefixes ||= [];
+      if(prefixes[slot]?.length!==(samples?.length||0)+1)prefixes[slot]=new Float64Array((samples?.length||0)+1);
+      const prefix=prefixes[slot],last=(samples?.length||1)-1;prefix[0]=0;
+      if(samples)for(let i=0;i<samples.length;i++)prefix[i+1]=prefix[i]+samples[i]-128;
+      for(let i=0;i<points;i++){
+        let local=0;
+        if(samples?.length){const at=Math.round((1-span)*last*.5+i/(points-1)*last*span),lo=Math.max(0,at-radius),hi=Math.min(last,at+radius);
+          local=(prefix[hi+1]-prefix[lo]+Math.max(0,radius-at)*(samples[0]-128)+Math.max(0,at+radius-last)*(samples[last]-128))/(128*(radius*2+1));}
+        output[i]=Math.tanh((local*detail+local*(1-detail))*gain);
+      }
+    };
+    const bandPcm=isPlaying?audioData?.ribbonTimeDomains:null;
+    fillTargets(bandPcm?.[0]||raw,targets,0);
+    let bandTargets=null;
+    if(bandPcm){
+      bandTargets=state.bandTargets ||= [targets,new Float64Array(points),new Float64Array(points)];
+      for(let row=1;row<3;row++)fillTargets(bandPcm[row],bandTargets[row],row);
+    }
+    for(let i=0;i<points;i++){
+      const u=i/(points-1);
+      const position=u-state.drift/(Math.PI*3);
+      flow[i]=(Math.sin(position*Math.PI*3)*.6+Math.sin(position*Math.PI*5)*.25)*(direction==='still'?breath:1);
+      const edge=Math.min(1,Math.min(u,1-u)/.18);
+      weights[i]=1-edgeStability*(1-edge*edge*(3-2*edge));
+    }
+    const flowAmplitude=Math.min(h*.42,h*.18*idleMotion*this.intensity)*flowWeight;
     // Back-to-front: each layer has its own curvature, amplitude and brightness.
     const layers=[{amp:.72,width:.38,alpha:.46,shift:.65,rate:.91},
       {amp:.78,width:.43,alpha:.78,shift:.10,rate:1.03},
       {amp:1,width:1,alpha:.94,shift:0,rate:1}];
-    ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+    if(this._ribbonGPU===undefined){
+      try{this._ribbonGPU=window.GlassWaveRibbonGPU&&ctx.canvas ? new window.GlassWaveRibbonGPU() : null;}catch{this._ribbonGPU=null;}
+    }
+    const gpu=this._ribbonGPU&&!this._ribbonGPU.lost;
+    const rows=state.rows ||= Array.from({length:3},()=>new Float64Array(points*2));
+    const paths=[];
     for(let row=0;row<3;row++){
-      const layer=layers[row],p=new Path2D();let lx=0,ly=cy;
+      const p=gpu?null:new Path2D();paths.push(p);let lx=0,ly=cy;
       for(let i=0;i<points;i++){
-        const u=i/(points-1);let value=0,local=0;
-        if(raw?.length){
-          // All three traces come directly from the same live PCM buffer, like Single/Full-band.
-          // Neighbouring sample windows and filter widths create depth without synthetic waves.
-          const length=raw.length-1,windowLength=length*span;
-          const offset=(1-span)*length*(.5);
-          const at=Math.max(0,Math.min(length,offset+u*windowLength));
-          const left=Math.floor(at),right=Math.min(length,left+1);
-          const direct=((raw[left]*(1-(at-left))+raw[right]*(at-left))-128)/128;
-          const radius=Math.round((1-detail)*24);
-          for(let j=-radius;j<=radius;j++)local+=(raw[Math.max(0,Math.min(length,Math.round(at)+j))]-128)/128;
-          local/=(radius*2+1);
-          value=direct*mix+local*(1-mix);
-          // Detail slider also suppresses fine oscillations when raw mix is high.
-          value=value*detail+local*(1-detail);
-        }
-        const idx=row*points+i,target=Math.tanh(value*gain);
+        const u=i/(points-1),idx=row*points+i,target=(bandTargets?.[row]||targets)[i];
         state.values[idx]+=(target-state.values[idx])*Math.min(1,follow*(row===2?1:row===1?.95:.90));
-        const position=u-state.drift/(Math.PI*3);
-        const gentle=(Math.sin(position*Math.PI*3)*.6+Math.sin(position*Math.PI*5)*.25)*(direction==='still'?breath:1);
+        const gentle=flow[i];
         const audio=state.values[idx];
         const audioScale=1+(row-1)*separation*.45;
         const audioExtension=(row-1)*separation*.12*Math.abs(audio);
         const flowScale=1+(row-1)*flowSeparation*.45;
         const flowExtension=(row-1)*flowSeparation*.12;
         // Independent controls: background travel never increases the audio trace separation.
-        const flowAmplitude=Math.min(h*.42,h*.18*idleMotion*this.intensity);
-        // Taper only audio transients near the outer 18%; retain each trace's flowing endpoints.
-        const edgePosition=Math.min(1,Math.min(u,1-u)/.18);
-        const edgeEnvelope=edgePosition*edgePosition*(3-2*edgePosition);
-        const audioWeight=1-edgeStability*(1-edgeEnvelope);
+        const audioWeight=weights[i];
         const displacement=amplitude*(audio*audioScale+audioExtension)*audioWeight+flowAmplitude*(gentle*flowScale+flowExtension);
         const y=Math.max(4,Math.min(h-4,cy+displacement)),x=u*w;
-        if(!i)p.moveTo(x,y);else p.quadraticCurveTo(lx,ly,(lx+x)/2,(ly+y)/2);lx=x;ly=y;
+        rows[row][i*2]=x;rows[row][i*2+1]=y;
+        if(p){if(!i)p.moveTo(x,y);else p.quadraticCurveTo(lx,ly,(lx+x)/2,(ly+y)/2);}lx=x;ly=y;
       }
-      p.lineTo(lx,ly);
-      const width=Math.max(1,lineWidth*layer.width),alpha=layer.alpha;
-      ctx.strokeStyle=gradients[row];
-      if(glow>0)for(const [scale,opacity] of [[4,.05],[2,.10]]){ctx.lineWidth=width*scale;ctx.globalAlpha=alpha*opacity*glow;ctx.stroke(p);}
-      ctx.globalAlpha=alpha;ctx.lineWidth=width;ctx.stroke(p);
-      if(glow>0&&row===1){ctx.strokeStyle='#effcff';ctx.lineWidth=Math.max(.65,width*.45);ctx.globalAlpha=glow*.45;ctx.stroke(p);}
+      p?.lineTo(lx,ly);
     }
-    ctx.restore();
+    const paintCanvas=()=>{
+      ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+      for(let row=0;row<3;row++){
+        let p=paths[row];
+        if(!p){
+          p=new Path2D();const points=rows[row];p.moveTo(points[0],points[1]);
+          for(let i=2;i<points.length;i+=2)p.quadraticCurveTo(points[i-2],points[i-1],(points[i-2]+points[i])*.5,(points[i-1]+points[i+1])*.5);
+          p.lineTo(points.at(-2),points.at(-1));
+        }
+        const layer=layers[row];
+        const width=Math.max(1,lineWidth*layer.width),alpha=layer.alpha;
+        ctx.strokeStyle=gradients[row];
+        if(glow>0)for(const [scale,opacity] of [[4,.05],[2,.10]]){ctx.lineWidth=width*scale;ctx.globalAlpha=alpha*opacity*glow;ctx.stroke(p);}
+        ctx.globalAlpha=alpha;ctx.lineWidth=width;ctx.stroke(p);
+        if(glow>0&&row===1){ctx.strokeStyle='#effcff';ctx.lineWidth=Math.max(.65,width*.45);ctx.globalAlpha=glow*.45;ctx.stroke(p);}
+      }
+      ctx.restore();
+    };
+    if(gpu){
+      try{
+        const color=this.tuning.modeColors?.[this.mode]||this.defaultTuning.modeColors[this.mode];
+        this._ribbonGpuPainted=this._ribbonGPU.draw(ctx,rows,layers,lineWidth,glow,color,w,h);
+      }catch{this._ribbonGPU.lost=true;}
+      if(!this._ribbonGpuPainted){
+        // Use already-computed curves: fallback must never advance the animation twice.
+        this._ribbonGPU=null;paintCanvas();
+      }
+    }else paintCanvas();
   }
 
   drawReactiveLines(ctx, audioData, isPlaying) {
@@ -948,7 +1019,7 @@ class Visualizer {
       bands[row] += (Math.min(1, Math.sqrt(targetEnergy || 0) * strength) - bands[row]) * alpha;
       const baseline = cy + (row - (count-1)/2) * h * .22;
       const path = new Path2D();let lastX=0,lastY=baseline;
-      const ranges = [0,.08,.4,1];
+      const ranges = audioData?.spatialBands ? [0,1/3,2/3,1] : [0,.08,.4,1];
       for(let i=0;i<points;i++) {
         const u=i/(points-1);let displacement=0;
         if(count===1 && pcm && pcm.length) {

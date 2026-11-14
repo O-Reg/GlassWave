@@ -29,8 +29,8 @@ class WindowsMediaControls {
     ipcMain.on('player-media-state',this.onState);ipcMain.on('player-media-command',this.onCommand);
     this.onAppCommand=(event,command)=>{const action={'media-play-pause':'play-pause','media-nexttrack':'next','media-previoustrack':'previous','media-play':'play','media-pause':'pause','media-stop':'stop'}[command];if(action){event.preventDefault?.();this.dispatch(action,'app-command');}};
     window.on('app-command',this.onAppCommand);
-    this.onFocus=()=>this.register();window.on('focus',this.onFocus);
-    this.onRefresh=()=>{this.toolbarRetries=0;this.refresh();};for(const event of ['ready-to-show','restore','show'])window.on(event,this.onRefresh);
+    this.onFocus=()=>{this.register();this.toolbarRetries=0;this.refresh();};window.on('focus',this.onFocus);
+    this.onRefresh=()=>{this.toolbarRetries=0;this.refresh();};for(const event of ['ready-to-show','restore','show','minimize'])window.on(event,this.onRefresh);
     this.onTheme=()=>{this.icons.clear();this.refresh();};nativeTheme?.on('updated',this.onTheme);
     powerMonitor?.on('resume',this.onFocus);
     window.once('closed',()=>this.dispose());
@@ -48,14 +48,14 @@ class WindowsMediaControls {
   dispatch(command,source){
     if(this.disposed||!CHANNELS[command]||!this.state.available||this.window.isDestroyed())return false;
     const time=this.now(),family=['play-pause','play','pause'].includes(command)?'playback':command;
-    if(this.last&&this.last.family===family&&this.last.source!==source&&time-this.last.time<120)return false;
+    if(this.last&&source!=='taskbar'&&this.last.source!=='taskbar'&&this.last.family===family&&this.last.source!==source&&time-this.last.time<120)return false;
     this.last={family,source,time};this.window.webContents.send(CHANNELS[command]);return true;
   }
   update(value){
     if(!value||typeof value!=='object')return;
     this.state={playing:value.playing===true,available:value.available===true,title:String(value.title||'').slice(0,160),artist:String(value.artist||'').slice(0,100)};this.refresh();
   }
-  icon(name){const dark=!!this.nativeTheme?.shouldUseDarkColors,key=name+dark;if(!this.icons.has(key))this.icons.set(key,this.nativeImage.createFromBuffer(iconPNG(name,dark)));return this.icons.get(key);}
+  icon(name){const dark=!!(this.nativeTheme?.shouldUseDarkColorsForSystemIntegratedUI??this.nativeTheme?.shouldUseDarkColors),key=name+dark;if(!this.icons.has(key))this.icons.set(key,this.nativeImage.createFromBuffer(iconPNG(name,dark)));return this.icons.get(key);}
   refresh(){
     if(this.platform!=='win32'||this.disposed||this.window.isDestroyed())return;
     const flags=this.state.available?['enabled']:['disabled'];
@@ -78,7 +78,7 @@ class WindowsMediaControls {
     for(const key of this.owned)this.globalShortcut.unregister(key);this.owned.clear();
     this.ipcMain.removeListener('player-media-state',this.onState);this.ipcMain.removeListener('player-media-command',this.onCommand);
     this.window.removeListener('app-command',this.onAppCommand);this.window.removeListener('focus',this.onFocus);
-    for(const event of ['ready-to-show','restore','show'])this.window.removeListener(event,this.onRefresh);
+    for(const event of ['ready-to-show','restore','show','minimize'])this.window.removeListener(event,this.onRefresh);
     this.nativeTheme?.removeListener('updated',this.onTheme);this.powerMonitor?.removeListener('resume',this.onFocus);
   }
 }

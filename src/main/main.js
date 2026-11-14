@@ -57,6 +57,8 @@ function log(msg) {
 log('--- GlassWave Starting ---');
 
 let mainWindow = null;
+const ownsPlaybackInstance = require('./singleInstance').acquire(app, () => mainWindow);
+if (!ownsPlaybackInstance) app.quit();
 let mediaControls = null;
 let tray = null;
 let database = null;
@@ -282,19 +284,36 @@ function createWindow() {
     updateNormalBounds();
   });
 
-  function restoreWindow() {
+  let lastPresentedState = '';
+  function publishWindowState() {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    if (isWindowFullscreen || mainWindow.isFullScreen()) mainWindow.setFullScreen(false);
-    isWindowFullscreen = false;
-    if (mainWindow.isMaximized()) mainWindow.unmaximize();
-    if (savedNormalBounds) {
-      mainWindow.setBounds(savedNormalBounds);
-    }
-    isWindowMaximized = false;
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('window-fullscreen-state', false);
-      mainWindow.webContents.send('window-maximized-state', false);
-    }
+    const fullscreen = isWindowFullscreen || mainWindow.isFullScreen();
+    const maximized = fullscreen || isWindowMaximized || mainWindow.isMaximized();
+    const state = `${fullscreen}:${maximized}`;
+    if (state === lastPresentedState) return;
+    lastPresentedState = state;
+    mainWindow.webContents.send('window-fullscreen-state', fullscreen);
+    mainWindow.webContents.send('window-maximized-state', maximized);
+  }
+  function restoreWindow() {
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.presentationChanging) return;
+    const finish = () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      isWindowFullscreen = false;
+      mainWindow.presentationFullscreen = false;
+      if (mainWindow.isMaximized()) mainWindow.unmaximize();
+      if (savedNormalBounds) mainWindow.setBounds(savedNormalBounds, false);
+      isWindowMaximized = false;
+      mainWindow.presentationChanging = false;
+      mainWindow.refreshRoundedShape?.();
+      publishWindowState();
+    };
+    mainWindow.presentationChanging = true;
+    if (isWindowFullscreen || mainWindow.isFullScreen()) {
+      // Commit restored geometry after the OS leaves fullscreen, never mid-transition.
+      mainWindow.once('leave-full-screen', () => setImmediate(finish));
+      mainWindow.setFullScreen(false);
+    } else finish();
   }
 
   function maximizeWindow() {
@@ -305,7 +324,7 @@ function createWindow() {
     isWindowMaximized = true;
     mainWindow.maximize();
     if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('window-maximized-state', true);
+      if (!mainWindow.presentationChanging) publishWindowState();
     }
   }
 
@@ -316,9 +335,9 @@ function createWindow() {
     }
     isWindowMaximized = true; // Guard restore bounds during native move/resize events.
     isWindowFullscreen = true;
+    mainWindow.presentationChanging = true;
+    mainWindow.presentationFullscreen = true;
     mainWindow.setFullScreen(true);
-    mainWindow.webContents.send('window-fullscreen-state', true);
-    mainWindow.webContents.send('window-maximized-state', true);
   }
 
   function toggleMaximize() {
@@ -334,31 +353,40 @@ function createWindow() {
   mainWindow.on('maximize', () => {
     isWindowMaximized = true;
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('window-maximized-state', true);
+      if (!mainWindow.presentationChanging) publishWindowState();
     }
   });
 
   mainWindow.on('unmaximize', () => {
     isWindowMaximized = false;
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('window-maximized-state', false);
+      if (!mainWindow.presentationChanging) publishWindowState();
     }
   });
 
   mainWindow.on('enter-full-screen', () => {
     isWindowMaximized = true;
+    isWindowFullscreen = true;
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('window-fullscreen-state', true);
-      mainWindow.webContents.send('window-maximized-state', true);
+      // Transparent Windows windows emit this event before SetBounds completes.
+      // Commit shape and renderer layout on the next turn, after final geometry.
+      setImmediate(() => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        mainWindow.presentationChanging = false;
+        mainWindow.refreshRoundedShape?.();
+        publishWindowState();
+      });
     }
   });
 
   mainWindow.on('leave-full-screen', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      const isMax = mainWindow.isMaximized();
-      isWindowMaximized = isMax;
-      mainWindow.webContents.send('window-fullscreen-state', false);
-      mainWindow.webContents.send('window-maximized-state', isMax);
+      isWindowFullscreen = false;
+      isWindowMaximized = mainWindow.isMaximized();
+      if (!mainWindow.presentationChanging) setImmediate(() => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        mainWindow.presentationFullscreen = false;mainWindow.refreshRoundedShape?.();publishWindowState();
+      });
     }
   });
 
@@ -376,6 +404,7 @@ function createWindow() {
   });
 
   ipcMain.on('window-toggle-fullscreen', () => {
+    if (mainWindow?.presentationChanging) return;
     if (mainWindow && (isWindowFullscreen || mainWindow.isFullScreen())) restoreWindow();
     else enterFullscreen();
   });
@@ -600,7 +629,7 @@ function createWindow() {
     return currentSnapState;
   });
 
-  let cursorMoveTimer=null, cursorMoveOrigin=null, cursorMoveStart=null, cursorMoveApplied=null;
+  let cursorMoveTimer=null, cursorMoveOrigin=null, cursorMoveStart=null, cursorMoveApplied=null, cursorMoveRestore=null;
   let nativeMoveStart = null;
   function updateSnapPreview(cursor) {
     const target = calculateSnapTarget(cursor);
@@ -645,6 +674,19 @@ function createWindow() {
     const cursor=screen.getCursorScreenPoint();
     const dx=cursor.x-cursorMoveOrigin.x,dy=cursor.y-cursorMoveOrigin.y;
     if(!cursorMoveApplied && Math.hypot(dx,dy)<4)return;
+    if(cursorMoveRestore){
+      const restore=cursorMoveRestore;
+      if(mainWindow.presentationChanging)return;
+      if(!restore.requested){restore.requested=true;restoreWindow();}
+      // Wait for the native fullscreen transition before positioning the restored window.
+      if(mainWindow.presentationChanging || mainWindow.isFullScreen() || mainWindow.isMaximized())return;
+      const restored={x:Math.round(cursor.x-restore.width*restore.fraction),
+        y:Math.round(cursor.y-restore.offsetY),width:restore.width,height:restore.height};
+      mainWindow.setBounds(restored,false);
+      cursorMoveStart=restored;cursorMoveOrigin={...cursor};cursorMoveApplied={x:restored.x,y:restored.y};
+      cursorMoveRestore=null;
+      return;
+    }
     const x=Math.round(cursorMoveStart.x+dx),y=Math.round(cursorMoveStart.y+dy);
     if(cursorMoveApplied?.x===x && cursorMoveApplied?.y===y)return;
     mainWindow.setPosition(x,y,false);
@@ -654,7 +696,7 @@ function createWindow() {
   function stopSystemCursorMove(finalSample=true) {
     if(cursorMoveTimer){clearInterval(cursorMoveTimer);cursorMoveTimer=null;}
     if(finalSample)sampleSystemCursor();
-    cursorMoveOrigin=null;cursorMoveStart=null;cursorMoveApplied=null;
+    cursorMoveOrigin=null;cursorMoveStart=null;cursorMoveApplied=null;cursorMoveRestore=null;
   }
   mainWindow.on('blur',()=>{stopSystemCursorMove(false);nativeMoveStart=null;activeSnapTarget=null;hideSnapGhost();});
   mainWindow.on('closed',()=>stopSystemCursorMove(false));
@@ -687,6 +729,12 @@ function createWindow() {
     const pointer=screen.getCursorScreenPoint();
     cursorMoveOrigin={x:pointer.x,y:pointer.y};
     cursorMoveStart={...dragStartBounds};
+    if(isWindowFullscreen || isWindowMaximized || mainWindow.isFullScreen() || mainWindow.isMaximized()){
+      const restore=savedNormalBounds || normalBounds || {width:1180,height:780};
+      cursorMoveRestore={width:restore.width,height:restore.height,
+        fraction:Math.max(0,Math.min(1,(pointer.x-dragStartBounds.x)/dragStartBounds.width)),
+        offsetY:Math.max(0,Math.min(40,pointer.y-dragStartBounds.y)),requested:false};
+    }
     const refresh=screen.getDisplayMatching(dragStartBounds).displayFrequency || 60;
     cursorMoveTimer=setInterval(sampleSystemCursor,Math.max(8,Math.round(1000/Math.min(120,Math.max(60,refresh)))));
   });
@@ -963,6 +1011,9 @@ function createWindow() {
     return database ? database.getAllTracks() : [];
   });
 
+  const libraryThumbnails = new (require('./libraryThumbnails'))(nativeImage, p => database?.getTrack(p));
+  ipcMain.handle('library-get-cover-thumbnail', (_, target) => libraryThumbnails.get(target));
+
   ipcMain.handle('library-get-cover-data', async (event, targetPath) => {
     if (parser && targetPath) {
       return await parser.getCoverDataUrl(targetPath);
@@ -1159,6 +1210,16 @@ function createWindow() {
       return await lyricsService.setFolder(result.filePaths[0]);
     } catch (e) { return { error: e.message }; }
   });
+  const decoder = new (require('./playbackDecoder').PlaybackDecoder)({
+    cacheDir: path.join(app.getPath('userData'), 'audio-decoder-cache'),
+    executable: [path.join(process.resourcesPath, 'bin', 'ffmpeg.exe'), process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Microsoft/WinGet/Links/ffmpeg.exe')].filter(Boolean).find(file => fs.existsSync(file)) || 'ffmpeg',
+    isKnownTrack: track => !!database.getTrack(track) || path.resolve(track).toLowerCase() === path.resolve(featuredTrackPath()).toLowerCase()
+  });
+  app.once('will-quit', () => decoder.dispose());
+  ipcMain.handle('audio-compatible-source', async (event, track) => {
+    if (event.sender !== mainWindow?.webContents) return { error: '无法访问此播放请求' };
+    try { return await decoder.resolve(track); } catch (error) { return { error: error.message }; }
+  });
   ipcMain.handle('lyrics-load', async (_, track) => {
     try { return await lyricsService.load(track); } catch (e) { return { error: e.message }; }
   });
@@ -1224,7 +1285,7 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
+if (ownsPlaybackInstance) app.whenReady().then(() => {
   setupLibrarySystem();
   createWindow();
   createTray();

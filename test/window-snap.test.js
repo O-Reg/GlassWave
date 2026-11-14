@@ -16,6 +16,7 @@ function fixture(workArea = { x: 0, y: 0, width: 3440, height: 1400 }) {
     mainWindow: {
       on: (name, fn) => { handlers[name] = fn; },
       hookWindowMessage: (message, fn) => { hooks[message] = fn; },
+      isFullScreen: () => context.isWindowFullscreen, isMaximized: () => context.isWindowMaximized,
       isDestroyed: () => false, getBounds: () => ({ ...bounds }), setMinimumSize() {},
       setBounds(value) { bounds = { ...value }; applied.push({ ...value }); },
       setPosition(x, y) { bounds = { ...bounds, x, y }; },
@@ -26,6 +27,8 @@ function fixture(workArea = { x: 0, y: 0, width: 3440, height: 1400 }) {
     ipcMain: { on: (name, fn) => { ipc[name] = fn; }, handle() {} },
     getOrCreateWireframeWindow: () => ghost, wireframeWindow: ghost,
     normalBounds: null, isMiniMode: false, isWindowFullscreen: false, isWindowMaximized: false,
+    savedNormalBounds: {x:200,y:150,width:1180,height:780},
+    restoreWindow() { context.isWindowFullscreen=false;context.isWindowMaximized=false; },
     updateNormalBounds() {}, setInterval(fn) { tick = fn; return 1; }, clearInterval() {}
   };
   const source = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
@@ -99,4 +102,43 @@ test('native preview clears when leaving the edge and stays disabled in mini/ful
     assert.equal(f.applied.length, 0);
     f.context[flag] = false;
   }
+});
+
+test('fullscreen and maximized top drags restore below the cursor only after a threshold', () => {
+  for(const flag of ['isWindowFullscreen','isWindowMaximized']){
+    const f=fixture();
+    f.context.mainWindow.setBounds({x:0,y:0,width:3440,height:1440});
+    f.context[flag]=true;f.moveTo(2580,20);
+    f.ipc['window-drag-start']({}, {screenX:2580,screenY:20});
+    f.moveTo(2582,21);f.tick();
+    assert.equal(f.context[flag],true,'a click must not exit fullscreen');
+    f.moveTo(2600,40);f.tick();
+    assert.equal(f.context[flag],false);
+    assert.deepEqual(f.context.mainWindow.getBounds(),{x:1715,y:20,width:1180,height:780});
+    f.moveTo(2610,50);f.tick();
+    assert.deepEqual(f.context.mainWindow.getBounds(),{x:1725,y:30,width:1180,height:780});
+    f.ipc['window-drag-end']();
+  }
+});
+
+test('fullscreen click cancellation does not restore, and delayed native restore is awaited', () => {
+  const f=fixture();f.context.isWindowFullscreen=true;f.moveTo(900,20);
+  f.ipc['window-drag-start']({},{});f.ipc['window-drag-end']();
+  assert.equal(f.context.isWindowFullscreen,true);
+  let requests=0;f.context.restoreWindow=()=>{requests++;};
+  f.ipc['window-drag-start']({},{});f.moveTo(920,40);f.tick();f.tick();
+  assert.equal(requests,1);assert.equal(f.applied.length,0);
+  f.context.isWindowFullscreen=false;f.tick();
+  assert.equal(f.applied.length,1);
+});
+
+test('transparent fullscreen drag waits for geometry commit even when native flags are already false', () => {
+  const f=fixture();f.context.isWindowFullscreen=true;f.moveTo(900,20);
+  f.context.restoreWindow=()=>{f.context.isWindowFullscreen=false;f.context.mainWindow.presentationChanging=true;};
+  f.ipc['window-drag-start']({},{});f.moveTo(920,40);f.tick();f.tick();
+  assert.equal(f.applied.length,0,'no cursor move may compete with pending restore bounds');
+  f.context.mainWindow.presentationChanging=false;f.tick();assert.equal(f.applied.length,1);
+  const first=f.context.mainWindow.getBounds();f.moveTo(930,50);f.tick();const next=f.context.mainWindow.getBounds();
+  assert.equal(next.x,first.x+10);assert.equal(next.y,first.y+10);
+  f.ipc['window-drag-end']();
 });

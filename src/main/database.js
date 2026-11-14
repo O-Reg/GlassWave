@@ -252,13 +252,15 @@ class LibraryDatabase {
 
   getAllTracks() {
     // Enrich with favorite and category status
-    const result = [];
+    const result = [], membership = new Map();
+    for (const category of this.categories) for (const p of new Set(category.trackPaths || [])) {
+      if (!membership.has(p)) membership.set(p, []);
+      membership.get(p).push(category.name);
+    }
     for (const t of this.tracks.values()) {
       t.isFavorite = this.favorites.has(t.path);
       // find categories this track belongs to
-      t.categories = this.categories
-        .filter(c => c.trackPaths && c.trackPaths.includes(t.path))
-        .map(c => c.name);
+      t.categories = membership.get(t.path) || [];
       result.push(t);
     }
     return result;

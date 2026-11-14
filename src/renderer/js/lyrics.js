@@ -221,9 +221,10 @@
       this.availableHeight = Math.max(24, bottom - top);
       const width = Math.min(Math.max(160, rect.width * this.settings.width / 100), Math.max(24, rect.width - 24));
       let height = Math.min(Math.max(80, this.availableHeight * this.settings.height / 100), this.availableHeight);
-      // The default below-cover placement uses its own remaining space; resizing switches to custom.
+      // Use the space below metadata only when it can hold a readable lyric frame.
+      // Enlarged artwork must not compress the entire subtitle into a thin strip.
       const belowSpace = bottom - meta.bottom - 10;
-      if (this.settings.position === 'below' && belowSpace >= 48) height = Math.min(height, belowSpace);
+      if (this.settings.position === 'below' && belowSpace >= Math.min(height, 120)) height = Math.min(height, belowSpace);
       this.stage.style.width = `${width}px`; this.stage.style.height = `${height}px`;
       const setSize = size => this.stage.style.setProperty('--lyric-effective-size', `${size}px`);
       // Measure content, since flex centering can hide overflow above the stage.

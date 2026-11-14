@@ -52,6 +52,7 @@
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
       if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return { ...DEFAULTS };
       const merged = Object.fromEntries(ACTIONS.map(action => [action.id, saved[action.id] ?? action.initial]));
+      for(const action of ACTIONS)if(action.id!=='playPause'&&merged[action.id]==='Space')merged[action.id]=action.initial;
       if (Object.values(merged).some(chord => !validChord(chord))) return { ...DEFAULTS };
       if (new Set(Object.values(merged)).size !== ACTIONS.length) return { ...DEFAULTS };
       return merged;
@@ -127,6 +128,7 @@
     if (event.metaKey) { message('Windows 键组合由系统保留，请换一个。', true); return; }
     const chord = chordFromEvent(event);
     if (!validChord(chord)) { message('这个组合由系统或软件保留，请换一个字母、数字、方向键或 F 键。', true); return; }
+    if(chord==='Space'&&recording!=='playPause'){message('空格固定用于播放 / 暂停，请选择其他组合。',true);return;}
     const occupied = ACTIONS.find(action => action.id !== recording && bindings[action.id] === chord);
     if (occupied) { message('与“' + occupied.label + '”冲突，请换一个组合。', true); return; }
     const action = ACTIONS.find(item => item.id === recording);
@@ -198,6 +200,19 @@
       case 'nextSkin': toggleQuickSkin(); break;
     }
   }
+  function typingTarget(target) {
+    if(!(target instanceof Element))return false;
+    if(target.closest('textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]'))return true;
+    const input=target.closest('input');
+    return input && !['button','submit','reset','range','checkbox','radio'].includes(input.type);
+  }
+  function fixedSpace(event) {
+    if(!ui || recording || event.isComposing || event.ctrlKey || event.altKey || event.shiftKey || event.metaKey ||
+       (event.code!=='Space'&&event.key!==' ') || typingTarget(event.target))return;
+    // Capture both edges: focused transport buttons must never synthesize another click.
+    event.preventDefault();event.stopImmediatePropagation();
+    if(event.type==='keydown'&&!event.repeat)runAction('playPause');
+  }
   function handle(event) {
     if (!ui || recording || event.defaultPrevented || event.isComposing || event.metaKey) return;
     const target = event.target;
@@ -216,6 +231,8 @@
     bound = true;
     window.addEventListener('keydown', handle);
     window.addEventListener('keydown', capture, true);
+    window.addEventListener('keydown', fixedSpace, true);
+    window.addEventListener('keyup', fixedSpace, true);
   }
   function closePage(focus = true) {
     if (!page) return false;
@@ -243,7 +260,7 @@
     page.id = 'shortcut-page';
     page.setAttribute('aria-label', '快捷键设置');
     page.setAttribute('aria-hidden', 'true');
-    page.innerHTML = '<div class="shortcut-page-toolbar"><button type="button" class="glass-pill-btn" id="shortcut-page-back">‹ 返回</button><strong>快捷键</strong><button type="button" class="glass-pill-btn" id="shortcut-reset-all">全部重置</button></div><div class="shortcut-page-scroll"><p class="setting-desc">点击按键即可修改。快捷切换在普通、极简和条状模式都可用，会在两套皮肤间往返并保持当前窗口模式；仅播放器获得焦点时生效。</p><div id="shortcut-list"></div><p class="setting-desc shortcut-fixed">固定操作：Esc 关闭菜单或退出全屏；键盘媒体键控制播放、上一首和下一首。</p></div><div id="shortcut-feedback" role="status" aria-live="polite"></div>';
+    page.innerHTML = '<div class="shortcut-page-toolbar"><button type="button" class="glass-pill-btn" id="shortcut-page-back">‹ 返回</button><strong>快捷键</strong><button type="button" class="glass-pill-btn" id="shortcut-reset-all">全部重置</button></div><div class="shortcut-page-scroll"><p class="setting-desc">点击按键即可修改。快捷切换在普通、极简和条状模式都可用，会在两套皮肤间往返并保持当前窗口模式；仅播放器获得焦点时生效。</p><div id="shortcut-list"></div><p class="setting-desc shortcut-fixed">固定操作：空格始终播放 / 暂停（输入文字时除外）；Esc 关闭菜单或退出全屏；键盘媒体键控制播放、上一首和下一首。</p></div><div id="shortcut-feedback" role="status" aria-live="polite"></div>';
     drawer.append(page);
     entry.querySelector('#btn-manage-shortcuts').addEventListener('click', () => {
       drawer.classList.add('shortcuts-page-open');

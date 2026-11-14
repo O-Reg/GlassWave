@@ -3,13 +3,16 @@
   const requestNative=window.requestAnimationFrame.bind(window),cancelNative=window.cancelAnimationFrame.bind(window);
   const callbacks=new Map();let nextId=1,scheduled=0,last=null,delivering=false;
   let period=1000/90, paused=false;
-  window.glasswaveFrameClock={setPaused(value){paused=!!value;last=null;if(paused&&scheduled){cancelNative(scheduled);scheduled=0;}if(!paused)schedule();},get paused(){return paused;},setRate(fps){const n=Number(fps);period=1000/(Number.isFinite(n)&&n>=30?Math.min(144,n):90);last=null;}};
+  window.glasswaveFrameClock={setPaused(value){paused=!!value;last=null;if(paused&&scheduled){cancelNative(scheduled);scheduled=0;}if(!paused)schedule();},get paused(){return paused;},setRate(fps){
+    const n=Number(fps),next=fps==='native'?0:1000/(Number.isFinite(n)&&n>=30?Math.min(360,n):90);
+    if(next!==period){period=next;last=null;}
+  }};
   function schedule(){if(!paused&&!scheduled&&!delivering&&callbacks.size)scheduled=requestNative(tick);}
   function tick(now){
     scheduled=0;
     if(paused)return;
-    if(last!==null&&now-last<period-.5){schedule();return;}
-    last=last===null?now:last+Math.max(1,Math.floor((now-last+.5)/period))*period;
+    if(period>0&&last!==null&&now-last<period-.5){schedule();return;}
+    last=period===0||last===null?now:last+Math.max(1,Math.floor((now-last+.5)/period))*period;
     delivering=true;
     const pending=[...callbacks.keys()];
     for(const id of pending){const fn=callbacks.get(id);if(!fn)continue;callbacks.delete(id);try{fn(now);}catch(e){setTimeout(()=>{throw e;},0);}}

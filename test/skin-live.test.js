@@ -93,3 +93,12 @@ test('renaming a skin changes only its name, never recaptures a song or skin set
   const saved=JSON.parse(values.getItem('glasswave_user_presets'));
   assert.equal(saved[0].name,'New');assert.deepEqual(saved[0].fullSkin,preset.fullSkin);
 });
+
+test('core artwork and metadata sizes are captured in skins and restored live',async()=>{
+ const f=fixture(),layout=JSON.stringify({cover:150,gap:40,title:32,artist:18});let restored;
+ f.values.setItem('glasswave_display_layout_v1',layout);
+ f.context.window.GlassWaveDisplayElements={restore(ui){assert.equal(ui,f.ui);restored=f.values.getItem('glasswave_display_layout_v1');}};
+ const skin=f.skin.capture(f.ui);assert.equal(skin.settings.glasswave_display_layout_v1,layout);
+ f.values.removeItem('glasswave_display_layout_v1');await f.skin.apply(skin);
+ assert.equal(restored,layout);assert.equal(f.playback.audio.currentTime,73.25);
+});

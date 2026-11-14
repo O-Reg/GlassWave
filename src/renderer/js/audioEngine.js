@@ -1,6 +1,6 @@
 /**
  * GlassWave Audio Engine
- * Hardware-accelerated Web Audio API architecture
+ * Web Audio playback graph with native browser decoding
  * Real-time FFT AnalyserNode (frequency & smoothed time-domain waveform)
  * Supports MP3, FLAC, WAV, AAC, M4A, OGG, OPUS
  */
@@ -12,6 +12,11 @@ class AudioEngine {
     this.analyser = null;
     this.source = null;
     this.gainNode = null;
+    this.transport = null;
+    this.transitionNode = null;
+    this.playIntent = false;
+    this.loadGeneration = 0;
+    this.onPlaybackError = null;
     this.reverb = null;
     this.reverbPreset = 'off';
     try { this.reverbPreset = window.GlassWaveReverb?.preset(localStorage.getItem('glasswave_reverb_preset')).id || 'off'; } catch {}
@@ -45,7 +50,7 @@ class AudioEngine {
     this.frequencyData = new Uint8Array(this.fftSize / 2);
     this.timeDomainData = new Uint8Array(this.fftSize);
 
-    // 7-Band Hardware Equalizer (BiquadFilterNode chain)
+    // 7-Band Web Audio Equalizer (BiquadFilterNode chain)
     this.eqFrequencies = [60, 150, 400, 1000, 2400, 6000, 15000];
     this.eqBandLabels = ['60Hz', '150Hz', '400Hz', '1kHz', '2.4kHz', '6kHz', '15kHz'];
     this.eqFilters = [];
@@ -66,16 +71,19 @@ class AudioEngine {
   ensureAudioContext() {
     if (!this.audioContext) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      this.audioContext = new AudioCtx();
+      this.audioContext = new AudioCtx({ latencyHint: 'playback' });
 
       this.analyser = this.audioContext.createAnalyser();
       this.analyser.fftSize = this.fftSize;
       this.analyser.smoothingTimeConstant = 0.82; // Fluid smoothing
 
       this.gainNode = this.audioContext.createGain();
-      this.gainNode.gain.value = this.volume;
+      this.gainNode.gain.value = this.isMuted ? 0 : this.volume;
+      this.transitionNode = this.audioContext.createGain();
+      this.transitionNode.gain.value = 1;
 
       if (this.audio) {
+        this.audio.volume = 1; this.audio.muted = false;
         this.source = this.audioContext.createMediaElementSource(this.audio);
 
         // Build 7-Band EQ Filter nodes
@@ -95,7 +103,9 @@ class AudioEngine {
         });
 
         // Pipeline: source -> EQ Filter Chain -> analyser -> gainNode -> destination
-        let prevNode = this.source;
+        this.eqPreamp = this.audioContext.createGain();
+        this.eqPreamp.gain.value = 1;this.source.connect(this.eqPreamp);
+        let prevNode = this.eqPreamp;
         for (const filter of this.eqFilters) {
           prevNode.connect(filter);
           prevNode = filter;
@@ -104,13 +114,32 @@ class AudioEngine {
           this.reverb = new window.GlassWaveReverb.Processor(this.audioContext, prevNode, this.analyser);
           this.reverb.select(this.reverbPreset);
         } else prevNode.connect(this.analyser);
+        if (window.GlassWaveAudioHeadroom) {
+          this.eqHeadroom = new window.GlassWaveAudioHeadroom.Headroom(this.audioContext, this.eqFrequencies);
+          this.updateEQHeadroom(true);
+        }
         this.analyser.connect(this.gainNode);
-        this.gainNode.connect(this.audioContext.destination);
+        this.gainNode.connect(this.transitionNode);
+        this.transitionNode.connect(this.audioContext.destination);
+        if (window.GlassWaveAudioTransport) this.transport = new window.GlassWaveAudioTransport.Transport(this.audioContext, this.audio, this.transitionNode, {
+          flush: () => this.reverb?.flush?.(),
+          onSettled: () => this.onTimeUpdate?.(this.audio.currentTime, this.audio.duration || 0),
+          onError: message => this.onPlaybackError?.(message)
+        });
       }
     }
 
-    if (this.audioContext.state === 'suspended') {
-      this.audioContext.resume();
+    if (!this.audioReliability && window.GlassWaveAudioReliability) {
+      this.audioReliability = window.GlassWaveAudioReliability.install(this.audioContext, this.audio, {
+        fadeIn: () => {
+          const t = this.audioContext.currentTime, gain = this.gainNode.gain;
+          gain.cancelScheduledValues(t); gain.setValueAtTime(0, t);
+          gain.setTargetAtTime(this.isMuted ? 0 : this.volume, t, .025);
+        }
+      });
+    }
+    if (['suspended', 'interrupted'].includes(this.audioContext.state)) {
+      Promise.resolve(this.audioContext.resume()).catch(e => console.warn('[AudioHealth] resume failed:', e.message));
     }
   }
 
@@ -136,73 +165,101 @@ class AudioEngine {
     });
 
     this.audio.addEventListener('ended', () => {
-      this.handleTrackEnded();
+      if (this.playIntent) this.handleTrackEnded();
     });
 
-    this.audio.addEventListener('error', (err) => {
-      console.warn('Audio playback error:', err);
+    this.audio.addEventListener('error', () => {
+      console.warn('Audio playback error:', this.audio.error?.code, this.audio.error?.message);
+      this.isPlaying = false;this.onStateChange?.(false);
+      const code = this.audio.error?.code;
+      if ([3,4].includes(code) && this.currentTrack && !this.fallbackAttempted && window.glasswaveAPI?.compatibleAudioSource) {
+        this.tryCompatibleSource();
+      } else this.onPlaybackError?.(code === 4 ? '当前音频格式无法解码或文件不可读' : '音频读取或解码失败，请重试或切换歌曲');
     });
   }
 
+  async tryCompatibleSource() {
+    this.fallbackAttempted = true;
+    const generation = this.loadGeneration, track = this.currentTrack;
+    const position = Number.isFinite(this.audio.currentTime) ? this.audio.currentTime : 0;
+    this.onPlaybackStatus?.('正在使用兼容解码…');
+    try {
+      const result = await window.glasswaveAPI.compatibleAudioSource(track.path);
+      if (generation !== this.loadGeneration || track !== this.currentTrack) return;
+      if (!result?.url || result.error) throw Error(result?.error || '兼容解码未返回可播放音频');
+      const commit = () => {
+        this.audio.src = result.url;this.audio.load();
+        if (position > 0) this.seek(position);
+        if (this.playIntent) this.play();
+      };
+      if (this.transport) await this.transport.changeSource(commit); else commit();
+    } catch (error) { if (generation === this.loadGeneration) this.onPlaybackError?.(error.message); }
+  }
+
   play() {
-    this.ensureAudioContext();
+    this.playIntent = true;
+    const hasSource=this.audio && (typeof this.audio.getAttribute==='function'
+      ? !!this.audio.getAttribute('src') : !!this.audio.src);
+    if(this.audio&&!hasSource){
+      // A taskbar Play is valid as soon as there is a queue, even before any file was loaded.
+      // An in-flight load will observe playIntent on commit; never start a second load.
+      if(this.transport?.operation?.kind==='load')return;
+      const track=this.currentTrack?.path?this.currentTrack:
+        (this.playbackQueue?.[this.queueIndex]||this.playbackQueue?.[0]);
+      if(track?.path)return this.loadTrack(track,true);
+      return false;
+    }
+    this.ensureAudioContext();this.transport?.playRequested();
     if (this.audio && this.audio.src) {
-      return this.audio.play().catch(e => console.log('Autoplay deferred until user action:', e));
+      return this.audio.play().then(() => true).catch(e => {
+        if (e.name !== 'AbortError') { console.warn('Audio play failed:', e.name, e.message); this.onPlaybackError?.(e.name === 'NotAllowedError' ? '请点击播放以允许音频输出' : '无法开始播放此音频'); }
+        return false;
+      });
     }
   }
 
   pause() {
-    if (this.audio) {
-      this.audio.pause();
-    }
+    this.playIntent = false;
+    if (this.transport && !this.audio.paused) this.transport.pause();
+    else this.audio?.pause();
   }
 
   togglePlayPause() {
-    if (this.isPlaying) {
-      this.pause();
-    } else {
-      this.play();
-    }
+    // Read the media element at click time; rendering and UI state may be paused/minimized.
+    const playing=typeof this.audio?.paused==='boolean'?!this.audio.paused&&!this.audio.ended:this.isPlaying;
+    return playing?this.pause():this.play();
   }
 
   seek(seconds) {
-    if (this.audio && !isNaN(seconds)) {
-      this.audio.currentTime = seconds;
-    }
+    if (this.transport) return this.transport.seek(seconds);
+    const value = Number(seconds);
+    if (!this.audio || !Number.isFinite(value)) return false;
+    try { this.audio.currentTime = Math.max(0, Number.isFinite(this.audio.duration) ? Math.min(value, this.audio.duration) : value); return true; }
+    catch { return false; }
+  }
+
+  beginScrub() { this.transport?.beginScrub(); }
+  endScrub(seconds) { return this.transport ? this.transport.endScrub(seconds) : this.seek(seconds); }
+  cancelScrub() { this.transport?.cancelScrub(); }
+
+  updateOutputVolume() {
+    const value = this.isMuted ? 0 : this.volume;
+    if (this.gainNode && this.audioContext) {
+      if (window.GlassWaveAudioTransport) window.GlassWaveAudioTransport.ramp(this.gainNode.gain, value, this.audioContext, .025);
+      else this.gainNode.gain.setTargetAtTime(value, this.audioContext.currentTime, .025);
+      this.audio.volume = 1; this.audio.muted = false;
+    } else if (this.audio) { this.audio.volume = this.volume; this.audio.muted = this.isMuted; }
   }
 
   setVolume(val) {
-    this.volume = Math.max(0, Math.min(1, val));
-    const targetGain = this.isMuted ? 0 : this.volume;
-    if (this.gainNode && this.audioContext) {
-      const t = this.audioContext.currentTime;
-      this.gainNode.gain.cancelScheduledValues(t);
-      // De-zippering: 25ms exponential parameter ramp eliminating clicks, pops, and current crackling in monitor headphones
-      this.gainNode.gain.setTargetAtTime(targetGain, t, 0.025);
-      // Keep audio element volume at 1.0 to prevent HTMLMediaElement internal stepping clicks & double attenuation
-      if (this.audio && this.audio.volume !== 1) {
-        this.audio.volume = 1;
-      }
-    } else if (this.audio) {
-      this.audio.volume = targetGain;
-    }
+    const value = Number(val); if (!Number.isFinite(value)) return;
+    this.volume = Math.max(0, Math.min(1, value)); this.updateOutputVolume();this.onVolumeChange?.();
   }
 
-  toggleMute() {
-    this.isMuted = !this.isMuted;
-    const targetGain = this.isMuted ? 0 : this.volume;
-    if (this.gainNode && this.audioContext) {
-      const t = this.audioContext.currentTime;
-      this.gainNode.gain.cancelScheduledValues(t);
-      this.gainNode.gain.setTargetAtTime(targetGain, t, 0.025);
-    } else if (this.audio) {
-      this.audio.muted = this.isMuted;
-    }
-    return this.isMuted;
-  }
+  toggleMute() { this.isMuted = !this.isMuted; this.updateOutputVolume();this.onVolumeChange?.(); return this.isMuted; }
 
   setEQBand(index, gainDb) {
-    if (index < 0 || index >= this.eqFrequencies.length) return;
+    if (!Number.isInteger(index) || index < 0 || index >= this.eqFrequencies.length || !Number.isFinite(Number(gainDb))) return;
     const clamped = Math.max(-12, Math.min(12, Math.round(gainDb * 10) / 10));
     this.eqGains[index] = clamped;
     this.eqPreset = 'custom';
@@ -210,6 +267,7 @@ class AudioEngine {
       const targetVal = this.eqEnabled ? clamped : 0;
       this.eqFilters[index].gain.setTargetAtTime(targetVal, this.audioContext.currentTime, 0.02);
     }
+    this.updateEQHeadroom();
     if (this.onEQChange) this.onEQChange(this.getEQState());
   }
 
@@ -221,6 +279,7 @@ class AudioEngine {
         filter.gain.setTargetAtTime(targetVal, this.audioContext.currentTime, 0.02);
       });
     }
+    this.updateEQHeadroom();
     if (this.onEQChange) this.onEQChange(this.getEQState());
   }
 
@@ -256,11 +315,22 @@ class AudioEngine {
         filter.gain.setTargetAtTime(targetVal, this.audioContext.currentTime, 0.03);
       });
     }
+    this.updateEQHeadroom();
     if (this.onEQChange) this.onEQChange(this.getEQState());
   }
 
   applyCustomEQ(gains, name = 'custom') {
     this.applyEQPreset(name, gains);
+  }
+
+  updateEQHeadroom(immediate = false) {
+    if (!this.eqHeadroom || !this.eqPreamp) return;
+    const target = this.eqHeadroom.factor(this.eqGains, this.eqEnabled), gain = this.eqPreamp.gain, t = this.audioContext.currentTime;
+    if (immediate) gain.value = target;
+    else if (Math.abs(target - gain.value) > 1e-7) {
+      if (window.GlassWaveAudioTransport) window.GlassWaveAudioTransport.ramp(gain, target, this.audioContext, target < gain.value ? .01 : .12);
+      else { gain.cancelScheduledValues(t);gain.setTargetAtTime(target,t,.08); }
+    }
   }
 
   getEQState() {
@@ -324,6 +394,10 @@ class AudioEngine {
 
   loadTrack(track, autoStart = true) {
     this.ensureAudioContext();
+    this.playIntent = !!autoStart;
+    if (autoStart) this.transport?.playRequested();
+    this.loadGeneration++;
+    this.fallbackAttempted = false;
     this.currentTrack = track;
 
     // Poweramp-style: Whenever a song is manually chosen (not internal next/previous navigation),
@@ -351,6 +425,7 @@ class AudioEngine {
           fileUrl = new URL(track.path, window.location.href).href;
         }
       }
+      const commit = () => {
       this.audio.src = fileUrl;
       this.audio.load();
 
@@ -360,9 +435,13 @@ class AudioEngine {
 
       if (this.onTrackChange) this.onTrackChange(track);
       if (this.onQueueChange) this.onQueueChange(this.playbackQueue, this.queueIndex);
-      if (autoStart) {
+      if (this.playIntent) {
         this.play();
       }
+      };
+      if (this.transport) return this.transport.changeSource(commit);
+      commit();
+
     }
   }
 
@@ -466,12 +545,13 @@ class AudioEngine {
     const scope = saved?.playbackScope;
     const category = scope?.type === 'category' ? categories.find(c => c.id === scope.categoryId) : null;
     const members = category ? new Set(category.trackPaths || []) : null;
-    let queue = members ? libraryTracks.filter(t => members.has(t.path)) : [];
+    const folder=scope?.type==='folder'&&typeof scope.folderPath==='string'?scope:null, browser=window.GlassWaveLibraryBrowser;
+    let queue = members ? libraryTracks.filter(t => members.has(t.path)) : folder&&browser?libraryTracks.filter(t=>folder.includeSubfolders?browser.inside(t.path,folder.folderPath):browser.direct(t.path,folder.folderPath)):[];
     if (!queue.length || (saved?.lastTrackPath && !queue.some(t => t.path === saved.lastTrackPath))) {
       queue = [...libraryTracks];
       this.playbackScope = { type: 'library' };
     } else {
-      this.playbackScope = { type: 'category', categoryId: category.id };
+      this.playbackScope = folder?{...folder}:{ type: 'category', categoryId: category.id };
     }
     this.playbackQueue = queue;
     this.queueIndex = Math.max(0, queue.findIndex(t => t.path === saved?.lastTrackPath));
@@ -481,12 +561,14 @@ class AudioEngine {
     this.reverbPreset = window.GlassWaveReverb?.preset(id).id || 'off';
     this.reverb?.select(this.reverbPreset);
     try { localStorage.setItem('glasswave_reverb_preset', this.reverbPreset); } catch {}
+    this.onReverbChange?.(this.reverbPreset);
     return this.reverbPreset;
   }
 
   setQueue(tracks, startIndex = 0, scope = { type: 'library' }) {
     this.playbackScope = scope?.type === 'category'
-      ? { type: 'category', categoryId: scope.categoryId } : { type: 'library' };
+      ? { type: 'category', categoryId: scope.categoryId } : scope?.type==='folder'
+        ? {type:'folder',folderPath:scope.folderPath,includeSubfolders:!!scope.includeSubfolders} : { type: 'library' };
     this.playbackQueue = Array.isArray(tracks) ? [...tracks] : [];
     this.queueIndex = Math.max(0, Math.min(this.playbackQueue.length - 1, startIndex));
     if (this.isShuffle && this.playbackQueue[this.queueIndex] && !this._isInternalNav) {

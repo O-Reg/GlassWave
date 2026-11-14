@@ -8,11 +8,35 @@ class LibraryScanner {
   constructor(database,metadataParser,onUpdateCallback) {
     this.db=database;this.parser=metadataParser;this.onUpdate=onUpdateCallback;
     this.watchers=new Map();this.scans=new Map();this.versions=new Map();this.debounceTimer=null;
+    this.pendingUpdates=new Map();this.activeUpdates=0;this.closed=false;
     this.reconcileTimer=setInterval(()=>this.reconcile(),30000);this.reconcileTimer.unref();
   }
   isSupportedAudio(p){return AUDIO_EXTS.has(path.extname(p).toLowerCase());}
   isSupportedImage(p){return IMAGE_EXTS.has(path.extname(p).toLowerCase());}
-  async reconcile(){for(const root of this.watchers.keys())await this.scanDirectory(root);}
+  reconcile(){
+    if(this.closed)return Promise.resolve();
+    if(this.reconcileJob)return this.reconcileJob;
+    this.reconcileJob=(async()=>{for(const root of this.watchers.keys())await this.scanDirectory(root);})()
+      .finally(()=>{this.reconcileJob=null;});
+    return this.reconcileJob;
+  }
+  queueFileUpdate(p,valid){
+    this.pendingUpdates.set(p,valid);
+    this.drainFileUpdates();
+  }
+  drainFileUpdates(){
+    while(!this.closed && this.activeUpdates<2 && this.pendingUpdates.size){
+      const [p,valid]=this.pendingUpdates.entries().next().value;
+      this.pendingUpdates.delete(p);this.activeUpdates++;
+      (async()=>{
+        if(!valid())return;
+        if(this.isSupportedAudio(p)){if(await this.parseAndStore(p,valid))this.scheduleSaveAndUpdate();}
+        else if(this.isSupportedImage(p))await this.scanDirectory(path.dirname(p));
+      })().catch(e=>console.warn('Music update:',e.message)).finally(()=>{
+        this.activeUpdates--;setImmediate(()=>this.drainFileUpdates());
+      });
+    }
+  }
   async refreshAmbiguousTitles(){
     let changed=false;
     for(const track of this.db.getAllTracks()){
@@ -36,17 +60,31 @@ class LibraryScanner {
   }
   async scan(root,valid){
     let changed=false;const missing=[];
+    // Index once: never enrich and re-walk the complete library for every folder.
+    const tracks=this.db.tracks instanceof Map?[...this.db.tracks.values()]:this.db.getAllTracks();
+    const children=new Map();let work=0;
+    for(const track of tracks){
+      if(inside(track.path,root)){
+        const parts=path.relative(root,track.path).split(path.sep);let dir=root;
+        for(const name of parts){
+          if(!children.has(dir))children.set(dir,new Map());
+          const names=children.get(dir),key=name.toLowerCase();
+          if(!names.has(key))names.set(key,[]);
+          names.get(key).push(track.path);dir=path.join(dir,name);
+        }
+      }
+      if(++work%256===0)await new Promise(resolve=>setImmediate(resolve));
+    }
     const walk=async dir=>{
       if(!valid())return;
       let entries;
       try{entries=await fs.promises.readdir(dir,{withFileTypes:true});}
-      catch(e){if(['ENOENT','ENOTDIR'].includes(e.code))missing.push(...this.db.getAllTracks().filter(t=>inside(t.path,dir)).map(t=>t.path));return;}
+      catch(e){if(['ENOENT','ENOTDIR'].includes(e.code))for(const paths of children.get(dir)?.values()||[])missing.push(...paths);return;}
       const names=new Set(entries.map(e=>e.name.toLowerCase()));
       // Only prune absent children of directories that were successfully read.
-      for(const t of this.db.getAllTracks())if(inside(t.path,dir)){
-        const first=path.relative(dir,t.path).split(path.sep)[0].toLowerCase();if(!names.has(first))missing.push(t.path);
-      }
+      for(const [name,paths] of children.get(dir)||[])if(!names.has(name))missing.push(...paths);
       for(const e of entries){
+        if(++work%64===0)await new Promise(resolve=>setImmediate(resolve));
         if(!valid())return;
         const p=path.join(dir,e.name);
         if(e.isDirectory())await walk(p);
@@ -64,7 +102,7 @@ class LibraryScanner {
     const watcher=chokidar.watch(root,{ignored:/(^|[\/\\])\../,persistent:true,ignoreInitial:true,awaitWriteFinish:{stabilityThreshold:1000,pollInterval:150}});
     this.watchers.set(root,watcher);
     const valid=()=>this.watchers.get(root)===watcher;
-    const update=async p=>{if(!valid())return;if(this.isSupportedAudio(p)){if(await this.parseAndStore(p,valid))this.scheduleSaveAndUpdate();}else if(this.isSupportedImage(p))await this.scanDirectory(path.dirname(p));};
+    const update=p=>{if(valid()&&(this.isSupportedAudio(p)||this.isSupportedImage(p)))this.queueFileUpdate(p,valid);};
     watcher.on('add',update).on('change',update).on('unlink',p=>{
       if(!valid()||!this.isSupportedAudio(p))return;
       this.versions.set(p,(this.versions.get(p)||0)+1);this.db.batchRemoveTracks([p]);this.scheduleSaveAndUpdate();
@@ -78,9 +116,9 @@ class LibraryScanner {
   scheduleSaveAndUpdate(){
     // Bounded batching: a continuous import must not postpone the UI forever.
     if(this.debounceTimer)return;
-    this.debounceTimer=setTimeout(()=>{this.debounceTimer=null;this.db.save();this.triggerUpdate();},250);
+    this.debounceTimer=setTimeout(()=>{this.debounceTimer=null;this.db.save();this.triggerUpdate();},750);
   }
   triggerUpdate(){if(this.onUpdate)this.onUpdate(this.db.getAllTracks());}
-  async close(){clearInterval(this.reconcileTimer);clearTimeout(this.debounceTimer);await Promise.all([...this.watchers.keys()].map(p=>this.unwatchFolder(p)));}
+  async close(){this.closed=true;this.pendingUpdates.clear();clearInterval(this.reconcileTimer);clearTimeout(this.debounceTimer);await Promise.all([...this.watchers.keys()].map(p=>this.unwatchFolder(p)));}
 }
 module.exports=LibraryScanner;

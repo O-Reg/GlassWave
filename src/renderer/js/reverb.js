@@ -45,7 +45,10 @@
     constructor(context,input,output){
       this.context=context;this.input=input;this.output=output;this.active=null;
       this.dry=context.createGain();this.dry.gain.value=1;input.connect(this.dry);this.dry.connect(output);
-      this.cache=new Map();this.timers=new Set();this.id='off';
+      this.cache=new Map();this.timers=new Set();this.retiring=new Set();this.id='off';
+    }
+    flush(){
+      for(const branch of [this.active,...this.retiring])if(branch){const buffer=branch.convolver.buffer;branch.convolver.buffer=null;branch.convolver.buffer=buffer;}
     }
     select(id){
       const p=preset(id);if(this.id===p.id)return p.id;
@@ -63,9 +66,10 @@
       this.dry.gain.cancelScheduledValues(now);
       this.dry.gain.setTargetAtTime(p.id==='off'?1:1-p.wet*.35,now,.025);
       if(previous){
+        this.retiring.add(previous);
         previous.gain.gain.setTargetAtTime(0,now,.015);
         const timer=setTimeout(()=>{
-          this.input.disconnect(previous.convolver);previous.convolver.disconnect();previous.gain.disconnect();this.timers.delete(timer);
+          this.input.disconnect(previous.convolver);previous.convolver.disconnect();previous.gain.disconnect();this.timers.delete(timer);this.retiring.delete(previous);
         },120);this.timers.add(timer);
       }
       this.active=next;this.id=p.id;return p.id;

@@ -56,6 +56,6 @@ test('audio engine routes the EQ into dry and wet paths before the analyser and 
   const engine=new sandbox.window.AudioEngine('audio-player');engine.setReverbPreset('hall');engine.ensureAudioContext();
   const last=engine.eqFilters.at(-1);assert.ok(last.targets.has(engine.reverb.dry));assert.ok(last.targets.has(engine.reverb.active.convolver));
   assert.ok(engine.reverb.dry.targets.has(engine.analyser));assert.ok(engine.reverb.active.gain.targets.has(engine.analyser));
-  assert.ok(engine.analyser.targets.has(engine.gainNode));assert.ok(engine.gainNode.targets.has(ctx.destination));
+  assert.ok(engine.analyser.targets.has(engine.gainNode));assert.ok(engine.gainNode.targets.has(engine.transitionNode));assert.ok(engine.transitionNode.targets.has(ctx.destination));
   engine.setReverbPreset('off');
 });
